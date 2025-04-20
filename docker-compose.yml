@@ -1,0 +1,34 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    mem_limit: 4g
+    memswap_limit: 4g
+    container_name: ceneo-app
+    ports:
+      - "3333:3333"
+    depends_on:
+      - redis
+    networks:
+      - ceneo-net
+    volumes:
+      - /app/public:/app/public
+    env_file:
+      - './.env.production'
+
+  redis:
+    image: redis:alpine
+    container_name: ceneo-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - /app/redis_data:/data
+    networks:
+      - ceneo-net
+    entrypoint: ["/bin/sh", "-c", "chown -R 999:999 /data && chmod -R 770 /data && exec redis-server"]
+
+networks:
+  ceneo-net:
+    external: true
