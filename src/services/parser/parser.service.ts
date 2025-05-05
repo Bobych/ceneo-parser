@@ -3,18 +3,14 @@ import { Browser, Page, ProtocolError, TimeoutError } from 'puppeteer';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import {
-  CapMonsterCloudClientFactory,
-  ClientOptions,
-  TurnstileProxylessRequest,
-} from '@zennolab_com/capmonstercloud-client';
 import { IExchangeRate } from '@interfaces';
 import { ParserConfig } from '@config/parser.config';
 import { BrowserConfig } from '@config/browser.config';
-import { GoogleService } from './google.service';
-import { LoggerService } from './logger.service';
-import { StatusService } from './status.service';
+import { GoogleService } from '../google.service';
+import { LoggerService } from '../logger.service';
+import { StatusService } from '../status.service';
 import { ENV } from '@constants';
+import { CaptchaService } from '@services/parser/captcha.service';
 
 interface Product {
   id: string;
@@ -41,6 +37,7 @@ export class ParserService {
     private readonly google: GoogleService,
     private readonly logger: LoggerService,
     private readonly status: StatusService,
+    private readonly captcha: CaptchaService,
   ) {}
 
   private log(message: string) {
@@ -150,37 +147,6 @@ export class ParserService {
     if (!page.isClosed()) await page.close();
   }
 
-  private async solveCaptcha(page: Page) {
-    const capMonster = CapMonsterCloudClientFactory.Create(
-      new ClientOptions({
-        clientKey: this.config.get<string>(ENV.CAPTCHA_API_TOKEN),
-      }),
-    );
-
-    const siteKey = await page.$eval('.cf-turnstile', (el) =>
-      el.getAttribute('data-sitekey'),
-    );
-
-    const task = new TurnstileProxylessRequest({
-      websiteKey: siteKey,
-      websiteURL: page.url(),
-    });
-
-    for (let i = 0; i < 3; i++) {
-      const result = await capMonster.Solve(task);
-      if (!result.error) {
-        return result.solution.token;
-      } else {
-        await this.log(`Ошибка при решении капчи: ${result.error}`);
-      }
-
-      await this.log(`${i + 1} попытка решения капчи. Ошибка: ${result.error}`);
-      await this.sleep();
-    }
-
-    throw new Error(`Не удалось решить капчу.`);
-  }
-
   private async sleep(ms?: number) {
     const period = ms ? ms : this.ms;
     return new Promise((resolve) =>
@@ -190,7 +156,6 @@ export class ParserService {
 
   private async openUrl(page: Page, url: string) {
     await this.sleep();
-
     await this.log(`Пытаюсь открыть: ${url}`);
 
     await Promise.all([
@@ -202,35 +167,7 @@ export class ParserService {
     ]);
 
     await this.log(`Открыл: ${url}`);
-
-    if (await page.$('.cf-turnstile')) {
-      try {
-        await this.log('Нашёл капчу, решаю...');
-        const captchaResponse = await this.solveCaptcha(page);
-
-        const dynamicId = await page.$eval(
-          '.cf-turnstile input[type="hidden"]',
-          (el) => el.id,
-        );
-        await page.evaluate(
-          (response, dynamicId) => {
-            const input = document.getElementById(
-              dynamicId,
-            ) as HTMLInputElement;
-            input.value = response;
-          },
-          captchaResponse,
-          dynamicId,
-        );
-
-        await page.click('button[type="submit"]');
-        await this.log('Капча решена.');
-        await this.sleep(500);
-      } catch (error) {
-        await this.log(`Ошибка при решении капчи: ${error}`);
-        return null;
-      }
-    }
+    await this.captcha.checkCaptcha(page);
   }
 
   private async waitFor(page: Page, selector: string, retries: number = 3) {
@@ -315,43 +252,42 @@ export class ParserService {
 
     while (url && !signal.aborted) {
       url = await this.fixUrl(url);
-      const page = await this.createPage();
-      const productsOnPage = await this.parseCategoryPage(page, url);
+      let page: Page | null = null;
 
-      if (!productsOnPage) {
-        this.userAgent = ParserConfig.userAgent();
-        await this.closePage(page);
-        continue;
+      try {
+        page = await this.createPage();
+        const productsOnPage = await this.parseCategoryPage(page, url);
+
+        if (!productsOnPage) {
+          this.userAgent = ParserConfig.userAgent();
+          continue;
+        }
+
+        const dataToWrite = await this.parseProducts(productsOnPage);
+        await this.google.insertData(sheetName, dataToWrite);
+
+        url = await page.evaluate(() => {
+          const nextButton = document.querySelector(
+            '.pagination .pagination__next',
+          );
+          return nextButton
+            ? 'https://www.ceneo.pl' + nextButton.getAttribute('href')
+            : null;
+        });
+      } catch (error) {
+        await this.log(`Ошибка при парсинге страницы категории: ${error}`);
+        url = null;
+      } finally {
+        if (page && !page.isClosed()) await page.close();
       }
-
-      const dataToWrite = await this.parseProducts(productsOnPage);
-      await this.google.insertData(sheetName, dataToWrite);
-
-      url = await page.evaluate(() => {
-        const nextButton = document.querySelector(
-          '.pagination .pagination__next',
-        );
-        return nextButton ? nextButton.getAttribute('href') : null;
-      });
-
-      if (url) {
-        url = 'https://www.ceneo.pl' + url;
-      }
-      await this.closePage(page);
     }
   }
 
-  async parseCategoryPage(page: Page, url: string): Promise<Product[]> {
+  async parseCategoryPage(page: Page, url: string): Promise<Product[] | null> {
     try {
       await this.openUrl(page, url);
-
-      await this.status.set({
-        type: 'categorypage',
-        data: url,
-      });
-
+      await this.status.set({ type: 'categorypage', data: url });
       await this.waitFor(page, ParserConfig.categoryClasses.category);
-
       await this.getExchangeRates();
 
       return await page.$$eval(
@@ -379,7 +315,7 @@ export class ParserService {
         ParserConfig.categoryClasses,
       );
     } catch (error) {
-      await this.log(`Ошибка: ${error}`);
+      await this.log(`Ошибка при парсинге категории: ${error}`);
       return null;
     }
   }
@@ -388,33 +324,46 @@ export class ParserService {
     let i = 0;
     const l = products.length;
     let attempts = 0;
+
     while (i < l) {
       attempts++;
       const product = products[i];
+      let page: Page | null = null;
 
-      const page = await this.createPage();
-      const pr = await this.getProduct(page, product.url);
-      await this.closePage(page);
+      try {
+        page = await this.createPage();
+        const pr = await this.getProduct(page, product.url);
+        if (!pr) {
+          this.userAgent = ParserConfig.userAgent();
+          if (attempts >= 3) {
+            i++;
+            attempts = 0;
+          }
+          continue;
+        }
 
-      if (!pr) {
-        this.userAgent = ParserConfig.userAgent();
+        product.name = pr.name;
+        product.price = pr.price;
+        product.flag = pr.flag;
+
+        if (this.exchangeRate !== 0 && pr.price) {
+          const priceInPLN = parseFloat(pr.price);
+          product.price = (priceInPLN / this.exchangeRate).toFixed(2);
+        }
+
+        attempts = 0;
+        i++;
+      } catch (error) {
+        await this.log(
+          `Ошибка при парсинге продукта: ${product.url} - ${error}`,
+        );
         if (attempts >= 3) {
           i++;
           attempts = 0;
         }
-        continue;
+      } finally {
+        if (page && !page.isClosed()) await page.close();
       }
-
-      product.name = pr.name;
-      product.price = pr.price;
-      product.flag = pr.flag;
-
-      if (this.exchangeRate !== 0 && pr.price) {
-        const priceInPLN = parseFloat(pr.price);
-        product.price = (priceInPLN / this.exchangeRate).toFixed(2);
-      }
-      attempts = 0;
-      i++;
     }
 
     return products

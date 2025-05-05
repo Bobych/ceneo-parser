@@ -1,5 +1,5 @@
 import { Controller, Post, UseGuards } from '@nestjs/common';
-import { ParserService } from '@services/parser.service';
+import { ParserService } from '@services/parser/parser.service';
 import { ApiTokenGuard } from '../api/api.guard';
 
 @Controller('api')
