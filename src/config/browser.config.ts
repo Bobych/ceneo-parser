@@ -7,7 +7,7 @@ export const BrowserConfig = {
     '--disable-dev-shm-usage',
     '--disable-gpu',
     '--no-zygote',
-    '--single-process',
+    '--enable-unsafe-swiftshader',
   ],
   protocolTimeout: 120000,
   dumpio: true,
