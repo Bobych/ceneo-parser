@@ -4,14 +4,11 @@ export const BrowserConfig = {
   args: [
     '--no-sandbox',
     '--disable-setuid-sandbox',
-    '--disable-gpu',
     '--disable-dev-shm-usage',
-    '--single-process',
+    '--disable-gpu',
     '--no-zygote',
-    '--disable-web-security',
-    '--disable-features=IsolateOrigins,site-per-process',
-    '--blink-settings=imagesEnabled=false',
-    '--window-size=1920,1080',
+    '--single-process',
   ],
   protocolTimeout: 120000,
+  dumpio: true,
 } as const;

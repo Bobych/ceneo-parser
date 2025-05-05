@@ -1,5 +1,5 @@
 import * as ps from 'puppeteer-extra';
-import { Browser, Page } from 'puppeteer';
+import { Browser, Page, ProtocolError, TimeoutError } from 'puppeteer';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -52,55 +52,82 @@ export class ParserService {
   }
 
   async enter() {
-    if (this.isRestarting) {
-      await this.log('Restarting is completed.');
-      this.isRestarting = false;
+    try {
+      if (this.isRestarting) {
+        await this.log('Restarting is completed.');
+        this.isRestarting = false;
+      }
+
+      setTimeout(() => {
+        this.launchBrowser();
+        this.parse();
+      }, 2000);
+    } catch (error) {
+      await this.handleError(error);
+    }
+  }
+
+  private async handleError(error: Error) {
+    console.error('Parser error:', error);
+
+    if (error instanceof TimeoutError) {
+      await this.log(`Timeout error: ${error.message}`);
+    } else if (error instanceof ProtocolError) {
+      await this.log(`Protocol error: ${error.message}`);
     }
 
-    setTimeout(async () => {
-      try {
-        await this.parse();
-      } catch (error) {
-        console.error(error);
-      } finally {
-        await this.enter();
-      }
-    }, 1000);
+    await this.restart();
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await this.enter();
   }
 
   async restart() {
-    if (this.abortController) {
-      this.abortController.abort();
+    try {
+      if (this.abortController) {
+        this.abortController.abort();
+        this.isRestarting = true;
+      }
+
       this.isRestarting = true;
+      await this.closeBrowser();
+    } catch (error) {
+      await this.log(`Ошибка при перезапуске: ${error}`);
     }
   }
 
   private async launchBrowser() {
-    await this.log('Запускаю браузер...');
-    await this.closeBrowser();
+    await this.log('Перезапускаю браузер...');
     try {
+      await this.closeBrowser();
       this.browser = await ps.default.launch({
         ...BrowserConfig,
         args: [...BrowserConfig.args, ParserConfig.proxyUrl()],
       });
+
+      this.browser.on('disconnected', () => {
+        this.log('Browser disconnected unexpectedly').catch(console.error);
+        this.restart().catch(console.error);
+      });
     } catch (error) {
-      await this.log(`Ошибка при запуске  браузера: ${error}`);
-      setTimeout(() => this.launchBrowser(), 1000);
+      await this.log(`Ошибка при запуске браузера: ${error}`);
+      throw error;
     }
   }
 
   private async closeBrowser() {
     if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-      await this.log('Закрываю браузер...');
+      try {
+        await this.log('Закрываю браузер...');
+        await this.browser.close();
+      } catch (error) {
+        await this.log(`Ошибка при закрытии браузера: ${error}`);
+      } finally {
+        this.browser = null;
+      }
     }
   }
 
   private async createPage(): Promise<Page> {
-    if (!this.browser) {
-      await this.launchBrowser();
-    }
     if (this.onUserAgent >= this.urlsOnUserAgents) {
       this.onUserAgent = 0;
       this.userAgent = ParserConfig.userAgent();
@@ -200,6 +227,7 @@ export class ParserService {
         await this.log('Капча решена.');
         await this.sleep(500);
       } catch (error) {
+        await this.log(`Ошибка при решении капчи: ${error}`);
         return null;
       }
     }
@@ -253,8 +281,6 @@ export class ParserService {
       const uid = `${data.uid}_${data.name}`;
       const url = data.url;
 
-      await this.launchBrowser();
-
       await this.log(`Перехожу к Google Row: ${url}`);
 
       await this.status.set({
@@ -271,9 +297,9 @@ export class ParserService {
       await this.closeBrowser();
     } catch (error) {
       if (error.message === 'Parse aborted') {
-        console.log('Parsing was aborted');
+        console.log('Parsing was aborted.');
       } else {
-        console.error('Error during parsing:', error);
+        console.error('Error during parsing: ', error);
       }
       throw error;
     } finally {
