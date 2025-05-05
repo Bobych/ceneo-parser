@@ -1,6 +1,7 @@
 FROM node:18-slim
 
 RUN apt-get update && apt-get install -y \
+    dbus-x11 \
     chromium \
     libnss3 \
     libatk-bridge2.0-0 \
