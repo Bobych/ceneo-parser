@@ -1,6 +1,5 @@
 export const BrowserConfig = {
-  headless: true,
-  executablePath: '/usr/bin/chromium',
+  headless: false,
   args: [
     '--disable-gpu',
     '--disable-software-rasterizer',
