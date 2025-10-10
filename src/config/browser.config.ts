@@ -14,4 +14,4 @@ export const BrowserConfig = {
   ],
   protocolTimeout: 120000,
   dumpio: true,
-} as const;
+};

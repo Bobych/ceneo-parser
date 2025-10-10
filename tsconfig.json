@@ -6,6 +6,7 @@
     "esModuleInterop": true,
     "skipDefaultLibCheck": true,
     "forceConsistentCasingInFileNames": true,
+    "outDir": "./build",
 
     "declaration": true,
     "removeComments": true,

@@ -96,10 +96,7 @@ export class ParserService {
     await this.log('Перезапускаю браузер...');
     try {
       await this.closeBrowser();
-      this.browser = await ps.default.launch({
-        ...BrowserConfig,
-        args: [...BrowserConfig.args, ParserConfig.proxyUrl()],
-      });
+      this.browser = await ps.default.launch(BrowserConfig);
 
       this.browser.on('disconnected', () => {
         this.log('Browser disconnected unexpectedly').catch(console.error);
@@ -130,13 +127,6 @@ export class ParserService {
       this.userAgent = ParserConfig.userAgent();
     }
     const page = await this.browser.newPage();
-
-    const { username, password } = ParserConfig.proxyAuth();
-
-    await page.authenticate({
-      username: username,
-      password: password,
-    });
 
     await page.setUserAgent(this.userAgent);
     this.onUserAgent += 1;
