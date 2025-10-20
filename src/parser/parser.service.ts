@@ -108,19 +108,19 @@ export class ParserService {
 
     if (url !== '---') await this.parseFullCategory(uidName, url);
     else {
-	  try {
-	    await this.productService.removeSheetName(uidName);
-	    await this.productService.saveProduct({
-	      name: '',
-              sheetName: uidName,
-	      price: null,
-	      externalId: null,
-	      flag: false,
-	      url: ''
-	    });
-	  } catch (error) {
-	      console.log('[ERROR] Saving empty category: ', error);
-	  }
+      try {
+        await this.productService.removeSheetName(uidName);
+        await this.productService.saveProduct({
+          name: '',
+          sheetName: uidName,
+          price: null,
+          externalId: null,
+          flag: false,
+          url: '',
+        });
+      } catch (error) {
+        console.log('[ERROR] Saving empty category: ', error);
+      }
     }
     await this.google.increaseLastUid();
   }
@@ -200,7 +200,7 @@ export class ParserService {
         page = await this.browser.createPage();
         const pr = await this.getProduct(page, product.url);
         if (!pr) {
-	  i++;
+          i++;
           // await this.browser.rotateUserAgent(true);
           continue;
         }
@@ -212,7 +212,9 @@ export class ParserService {
 
         if (this.exchangeRate !== 0 && pr.price) {
           const priceInPLN = pr.price;
-          product.price = parseFloat((priceInPLN / this.exchangeRate).toFixed(2));
+          product.price = parseFloat(
+            (priceInPLN / this.exchangeRate).toFixed(2),
+          );
         }
 
         await this.productService.saveProduct(product);
@@ -268,7 +270,7 @@ export class ParserService {
             );
             const availability = availabilityEl?.textContent?.trim() || '';
 
-	    const supplierLogo = el.querySelector(
+            const supplierLogo = el.querySelector(
               productClasses.supplier,
             ) as HTMLImageElement;
             const supplierName = supplierLogo ? supplierLogo.alt : null;
@@ -304,12 +306,14 @@ export class ParserService {
 
       let price = null;
       if (offers.length >= 2) {
-        price = parseFloat(((offers[0].price + offers[1].price) / 2).toFixed(2));
+        price = parseFloat(
+          ((offers[0].price + offers[1].price) / 2).toFixed(2),
+        );
       }
 
       let flag = true;
       if (price === null) {
-        flag =  false;
+        flag = false;
       }
 
       return {

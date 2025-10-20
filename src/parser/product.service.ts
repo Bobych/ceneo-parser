@@ -10,26 +10,28 @@ export class ProductService {
     console.log('\n\nSAVING:\n', JSON.stringify(product), '\n\n');
 
     try {
-      const pr = product.externalId ? await this.prisma.product.findUnique({
-      	where: {
-           externalId: product.externalId, 
-	}
-      }) : null;
+      const pr = product.externalId
+        ? await this.prisma.product.findUnique({
+            where: {
+              externalId: product.externalId,
+            },
+          })
+        : null;
       if (pr) {
-	await this.prisma.product.update({
+        await this.prisma.product.update({
           where: { externalId: product.externalId },
-  	  data: {
-	    name: product.name,
-	    price: product.price,
-	    url: product.url,
-	    flag: product.flag,
-	    sheetName: product.sheetName,
-	  },
+          data: {
+            name: product.name,
+            price: product.price,
+            url: product.url,
+            flag: product.flag,
+            sheetName: product.sheetName,
+          },
         });
       } else {
         await this.prisma.product.create({
           data: {
-	    externalId: product.externalId,
+            externalId: product.externalId,
             name: product.name,
             price: product.price,
             url: product.url,
@@ -38,8 +40,8 @@ export class ProductService {
           },
         });
       }
-    } catch(e) {
-        console.error('FULL ERROR: ', e, JSON.stringify(e, null, 2));
+    } catch (e) {
+      console.error('FULL ERROR: ', e, JSON.stringify(e, null, 2));
     }
   }
 
@@ -50,12 +52,12 @@ export class ProductService {
       await this.prisma.product.deleteMany({
         where: {
           sheetName: {
-	    startsWith: prefix
-	  },
+            startsWith: prefix,
+          },
         },
       });
-    } catch(e) {
-        console.error('FULL ERROR BY REMOVING: ', e, JSON.stringify(e, null, 2));
+    } catch (e) {
+      console.error('FULL ERROR BY REMOVING: ', e, JSON.stringify(e, null, 2));
     }
   }
 }

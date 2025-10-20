@@ -45,20 +45,21 @@ export class ExporterService {
     const products = await this.db.product.findMany({
       select: { sheetName: true },
       distinct: ['sheetName'],
-     });
-     return products
-     	.map((p) => p.sheetName)
-	.sort((a, b) => a.localeCompare(b));
-  }  
-  
-  private async getOrCreateWorksheet(workbook: ExcelJS.Workbook, sheetName: string) {
+    });
+    return products.map((p) => p.sheetName).sort((a, b) => a.localeCompare(b));
+  }
+
+  private async getOrCreateWorksheet(
+    workbook: ExcelJS.Workbook,
+    sheetName: string,
+  ) {
     const sanitizedName = this.sanitizeSheetName(sheetName);
     const existingWorksheet = workbook.getWorksheet(sanitizedName);
-  
+
     if (existingWorksheet) {
       return existingWorksheet;
     }
-  
+
     return workbook.addWorksheet(sanitizedName);
   }
 
@@ -82,7 +83,7 @@ export class ExporterService {
       if (products.length === 0) break;
 
       for (const product of products) {
-	if (!product.externalId) continue;
+        if (!product.externalId) continue;
         try {
           worksheet.addRow([
             product.externalId,

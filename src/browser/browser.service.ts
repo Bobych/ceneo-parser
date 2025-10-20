@@ -29,7 +29,7 @@ export class BrowserService implements OnModuleDestroy {
     await page.setUserAgent(this.userAgent);
     this.onUserAgent += 1;
     page.setDefaultNavigationTimeout(60000);
-    page.on('console', msg => console.log('BROWSER LOG>', msg.text()));
+    page.on('console', (msg) => console.log('BROWSER LOG>', msg.text()));
 
     return page;
   }
@@ -55,11 +55,11 @@ export class BrowserService implements OnModuleDestroy {
 
   rotateUserAgent(force?: boolean) {
     if (!force) {
-        if (this.onUserAgent >= 10000) {
-            this.userAgent = getRandomUserAgent();
-	    this.onUserAgent = 0;
-        }
-        return;
+      if (this.onUserAgent >= 10000) {
+        this.userAgent = getRandomUserAgent();
+        this.onUserAgent = 0;
+      }
+      return;
     }
     this.userAgent = getRandomUserAgent();
     this.onUserAgent = 0;

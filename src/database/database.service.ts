@@ -17,11 +17,11 @@ export class DatabaseService
 
   // ==================== Products ====================
   async saveProduct(product: Product): Promise<void> {
-//    const parsed = {
-//	...product,
-//	externalId: Number(product.externalId),
-//	flag: product.flag === '' ? false : true,
-//    };
+    //    const parsed = {
+    //	...product,
+    //	externalId: Number(product.externalId),
+    //	flag: product.flag === '' ? false : true,
+    //    };
     await this.product.upsert({
       where: { externalId: product.externalId },
       create: product,
