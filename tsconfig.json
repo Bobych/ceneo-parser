@@ -15,24 +15,7 @@
     "sourceMap": true,
     "incremental": true,
     "paths": {
-      "@constants": [
-        "src/constants/_index.ts"
-      ],
-      "@modules/*": [
-        "src/modules/*"
-      ],
-      "@interfaces": [
-        "src/interfaces/_index.ts"
-      ],
-      "@services/*": [
-        "src/services/*"
-      ],
-      "@controllers/*": [
-        "src/controllers/*"
-      ],
-      "@config/*": [
-        "src/config/*"
-      ]
+      "@/*": ["src/*"],
     }
   }
 }
