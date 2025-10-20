@@ -6,3 +6,5 @@ node_modules
 .env*
 
 credentials.json
+
+/src/generated/prisma

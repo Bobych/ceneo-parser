@@ -1,5 +1,6 @@
 export const BrowserConfig = {
-  headless: false,
+  headless: true,
+  executablePath: '/usr/bin/chromium-browser',
   args: [
     '--disable-gpu',
     '--disable-software-rasterizer',
@@ -12,5 +13,5 @@ export const BrowserConfig = {
     '--enable-unsafe-swiftshader',
   ],
   protocolTimeout: 120000,
-  dumpio: true,
+  // dumpio: true,
 };

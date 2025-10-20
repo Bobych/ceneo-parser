@@ -1,4 +1,4 @@
-import { ENV } from '@constants';
+import { ENV } from '@/constants';
 import {
   Injectable,
   CanActivate,
