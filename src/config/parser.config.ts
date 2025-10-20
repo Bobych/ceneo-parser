@@ -22,7 +22,7 @@ export const ParserConfig = {
   },
 
   productClasses: {
-    offer: '.product-offer__container',
+    offer: '.product-offers--standard .product-offer__container',
     name: '.product-top__title h1',
     price: '.product-offer__product__price .value',
     availability: '.shipmentday-container span',
