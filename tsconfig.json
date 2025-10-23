@@ -12,8 +12,8 @@
     "removeComments": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
-    "sourceMap": true,
-    "incremental": true,
+    "sourceMap": false,
+    "incremental": false,
     "paths": {
       "@/*": ["src/*"],
     }
