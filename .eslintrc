@@ -1,0 +1,30 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "plugins": [
+    "@typescript-eslint",
+    "prettier"
+  ],
+  "rules": {
+    "prettier/prettier": [
+      "warn",
+      {
+        "tabWidth": 4,
+        "printWidth": 100,
+        "endOfLine": "auto",
+        "arrowParens": "avoid",
+        "trailingComma": "all",
+        "semi": true,
+        "useTabs": false,
+        "singleQuote": true,
+        "jsxSingleQuote": true,
+        "bracketSpacing": true,
+        "bracketSameLine": false
+      }
+    ],
+    "@typescript-eslint/no-unused-vars": "warn",
+    "@typescript-eslint/no-explicit-any": "warn",
+    "prefer-const": "warn",
+    "no-console": "warn"
+  }
+}

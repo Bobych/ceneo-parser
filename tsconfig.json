@@ -6,32 +6,16 @@
     "esModuleInterop": true,
     "skipDefaultLibCheck": true,
     "forceConsistentCasingInFileNames": true,
+    "outDir": "./build",
 
     "declaration": true,
     "removeComments": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
-    "sourceMap": true,
-    "incremental": true,
+    "sourceMap": false,
+    "incremental": false,
     "paths": {
-      "@constants": [
-        "src/constants/_index.ts"
-      ],
-      "@modules/*": [
-        "src/modules/*"
-      ],
-      "@interfaces": [
-        "src/interfaces/_index.ts"
-      ],
-      "@services/*": [
-        "src/services/*"
-      ],
-      "@controllers/*": [
-        "src/controllers/*"
-      ],
-      "@config/*": [
-        "src/config/*"
-      ]
+      "@/*": ["src/*"],
     }
   }
 }

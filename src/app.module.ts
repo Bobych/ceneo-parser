@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
-import { NODE } from '@constants';
-import { GoogleModule } from '@modules/google.module';
-import { ParserModule } from '@modules/parser.module';
-import { AppController } from '@controllers/app.controller';
-import { ApiController } from '@controllers/api.controller';
+import { NODE } from '@/constants';
+import { GoogleModule } from '@/google/google.module';
+import { ParserModule } from '@/parser/parser.module';
+import { AppController } from '@/app.controller';
+import { ApiController } from '@/api/api.controller';
+import { ExportController } from '@/exporter/exporter.controller';
+import { ExporterModule } from '@/exporter/exporter.module';
 
 @Module({
   imports: [
@@ -18,6 +20,7 @@ import { ApiController } from '@controllers/api.controller';
     }),
     GoogleModule,
     ParserModule,
+    ExporterModule,
   ],
   controllers: [AppController, ApiController],
 })
