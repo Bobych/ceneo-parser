@@ -1,4 +1,4 @@
 export interface IRedisObject {
-  key: string;
-  value: string;
+    key: string;
+    value: string;
 }

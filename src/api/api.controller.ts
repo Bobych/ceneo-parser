@@ -4,15 +4,15 @@ import { ApiTokenGuard } from '@/api/api.guard';
 
 @Controller('api')
 export class ApiController {
-  constructor(private readonly parser: ParserService) {}
+    constructor(private readonly parser: ParserService) {}
 
-  @Post('restart')
-  @UseGuards(ApiTokenGuard)
-  async restart() {
-    try {
-      return { message: 'Process restarted successfully.' };
-    } catch (error) {
-      return { message: 'Failed to restart process.', error: error.message };
+    @Post('restart')
+    @UseGuards(ApiTokenGuard)
+    async restart() {
+        try {
+            return { message: 'Process restarted successfully.' };
+        } catch (error) {
+            return { message: 'Failed to restart process.', error: error.message };
+        }
     }
-  }
 }

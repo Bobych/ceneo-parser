@@ -4,8 +4,8 @@ import { DatabaseService } from '@/database/database.service';
 import { ExportController } from '@/exporter/exporter.controller';
 
 @Module({
-  providers: [ExporterService, DatabaseService],
-  controllers: [ExportController],
-  exports: [ExporterService],
+    providers: [ExporterService, DatabaseService],
+    controllers: [ExportController],
+    exports: [ExporterService],
 })
 export class ExporterModule {}

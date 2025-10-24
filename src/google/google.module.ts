@@ -5,8 +5,8 @@ import { RedisModule } from '@/redis/redis.module';
 import { LoggerModule } from '@/logger/logger.module';
 
 @Module({
-  imports: [RedisModule, LoggerModule],
-  providers: [GoogleService],
-  exports: [GoogleService],
+    imports: [RedisModule, LoggerModule],
+    providers: [GoogleService],
+    exports: [GoogleService],
 })
 export class GoogleModule {}

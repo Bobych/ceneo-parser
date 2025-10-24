@@ -5,12 +5,12 @@ import { IStatus } from '@/interfaces/StatusInterface';
 
 @Injectable()
 export class StatusService {
-  constructor(private readonly redis: RedisService) {}
+    constructor(private readonly redis: RedisService) {}
 
-  async set(status: IStatus) {
-    await this.redis.setStatus({
-      key: `status:${status.type}`,
-      value: status.data,
-    });
-  }
+    async set(status: IStatus) {
+        await this.redis.setStatus({
+            key: `status:${status.type}`,
+            value: status.data,
+        });
+    }
 }

@@ -10,14 +10,8 @@ import { ProductService } from './product.service';
 import { DatabaseService } from '@/database/database.service';
 
 @Module({
-  imports: [
-    GoogleModule,
-    LoggerModule,
-    StatusModule,
-    BrowserModule,
-    CaptchaModule,
-  ],
-  providers: [ParserService, ProductService, DatabaseService],
-  exports: [ParserService],
+    imports: [GoogleModule, LoggerModule, StatusModule, BrowserModule, CaptchaModule],
+    providers: [ParserService, ProductService, DatabaseService],
+    exports: [ParserService],
 })
 export class ParserModule {}

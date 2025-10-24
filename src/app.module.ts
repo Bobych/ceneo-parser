@@ -10,18 +10,18 @@ import { ExportController } from '@/exporter/exporter.controller';
 import { ExporterModule } from '@/exporter/exporter.module';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      envFilePath:
-        process.env.NODE_ENV == NODE.PRODUCTION
-          ? `./.env.${NODE.PRODUCTION}`
-          : `./.env.${NODE.DEVELOPMENT}`,
-    }),
-    GoogleModule,
-    ParserModule,
-    ExporterModule,
-  ],
-  controllers: [AppController, ApiController],
+    imports: [
+        ConfigModule.forRoot({
+            isGlobal: true,
+            envFilePath:
+                process.env.NODE_ENV == NODE.PRODUCTION
+                    ? `./.env.${NODE.PRODUCTION}`
+                    : `./.env.${NODE.DEVELOPMENT}`,
+        }),
+        GoogleModule,
+        ParserModule,
+        ExporterModule,
+    ],
+    controllers: [AppController, ApiController],
 })
 export class AppModule {}
