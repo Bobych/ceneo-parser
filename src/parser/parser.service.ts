@@ -36,9 +36,8 @@ export class ParserService {
 
         if (job) {
             await job.log(`[${new Date().toISOString()}] ${message}`);
-        } else {
-            console.log(message);
         }
+        console.log(message);
     }
 
     private formUidName(uid: string, name: string) {
@@ -132,7 +131,6 @@ export class ParserService {
         });
 
         if (url !== '---') {
-            console.log('теперь тут');
             await this.parseFullCategory(uidName, url);
         } else {
             try {
