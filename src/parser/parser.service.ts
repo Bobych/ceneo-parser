@@ -5,15 +5,16 @@ import { ConfigService } from '@nestjs/config';
 import { IExchangeRate } from '@/interfaces/ExchangeRateInterface';
 import { ParserConfig } from '@/config/parser.config';
 import { GoogleService } from '@/google/google.service';
-import { LoggerService } from '@/logger/logger.service';
 import { StatusService } from '@/status/status.service';
-import { ENV } from '@/constants';
+import { ENV, QUEUE_PARSER_CONCURRENCY } from '@/constants';
 import { CaptchaService } from '@/captcha/captcha.service';
 import { BrowserService } from '@/browser/browser.service';
 import { fixUrl } from '@/utils/fixUrl';
 import { ProductDto } from '@/parser/dto/product.dto';
 import { ProductService } from './product.service';
 import { sleep } from '@/utils/sleep';
+import { QueueService } from '@/queue/queue.service';
+import { JobContextService } from '@/queue/job-context.service';
 
 @Injectable()
 export class ParserService {
@@ -22,15 +23,22 @@ export class ParserService {
     constructor(
         private readonly config: ConfigService,
         private readonly google: GoogleService,
-        private readonly logger: LoggerService,
         private readonly status: StatusService,
         private readonly captcha: CaptchaService,
         private readonly browser: BrowserService,
         private readonly productService: ProductService,
+        private readonly queueService: QueueService,
+        private readonly jobContext: JobContextService,
     ) {}
 
-    private log(message: string) {
-        return this.logger.set({ service: 'parser', message });
+    private async log(message: string) {
+        const job = this.jobContext.getJob();
+
+        if (job) {
+            await job.log(`[${new Date().toISOString()}] ${message}`);
+        } else {
+            console.log(message);
+        }
     }
 
     private formUidName(uid: string, name: string) {
@@ -38,7 +46,30 @@ export class ParserService {
     }
 
     async onModuleInit() {
-        this.enter();
+        this.enterWithQueue();
+    }
+
+    private async enterWithQueue() {
+        setInterval(async () => {
+            const activeJobs = await this.queueService.getActiveJobsCount();
+
+            if (activeJobs >= QUEUE_PARSER_CONCURRENCY) return;
+            const availableSlots = QUEUE_PARSER_CONCURRENCY - activeJobs;
+            for (let i = 0; i < availableSlots; i++) {
+                await this.scheduleNextUid();
+            }
+        }, 10000);
+    }
+
+    private async scheduleNextUid() {
+        try {
+            const uid = await this.google.getLastUid();
+
+            await this.queueService.addParseJob(uid);
+            await this.google.increaseLastUid();
+        } catch (error) {
+            console.error('Error scheduling job:', error);
+        }
     }
 
     async enter() {
@@ -85,6 +116,39 @@ export class ParserService {
             const nextButton = document.querySelector('.pagination .pagination__next');
             return nextButton ? 'https://www.ceneo.pl' + nextButton.getAttribute('href') : null;
         });
+    }
+
+    async parseWithUid(uid: string) {
+        const googleRowData = await this.google.getUidRow(uid);
+
+        const uidName = this.formUidName(googleRowData.uid, googleRowData.name);
+        const url = googleRowData.url;
+
+        await this.log(`Перехожу к Google Row: ${url}`);
+
+        await this.status.set({
+            type: 'googlerow',
+            data: uidName,
+        });
+
+        if (url !== '---') {
+            console.log('теперь тут');
+            await this.parseFullCategory(uidName, url);
+        } else {
+            try {
+                await this.productService.removeSheetName(uidName);
+                await this.productService.saveProduct({
+                    name: '',
+                    sheetName: uidName,
+                    price: null,
+                    externalId: null,
+                    flag: false,
+                    url: '',
+                });
+            } catch (error) {
+                console.log('[ERROR] Saving empty category: ', error);
+            }
+        }
     }
 
     async parse() {

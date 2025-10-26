@@ -102,9 +102,32 @@ export class GoogleService {
         }
     }
 
+    async getUidRow(uid: string): Promise<ExportData> {
+        try {
+            const range = `${this.config.get<string>(ENV.EXPORT_SHEET_ID)}!A${uid}:Z${uid}`;
+
+            const response = await this.sheets.spreadsheets.values.get({
+                spreadsheetId: this.config.get<string>(ENV.EXPORT_SPREADSHEET_ID),
+                range: range,
+            });
+
+            const { values } = response.data;
+
+            return values.map(([uid, name, url]) => ({
+                uid,
+                name,
+                url,
+            }))[0];
+        } catch (error) {
+            await this.logger.set({
+                service: 'google',
+                message: error,
+            });
+        }
+    }
+
     async getLastUidRow(): Promise<ExportData> {
         try {
-            await this.moveSheetToArchive();
             let uid = await this.getLastUid();
 
             if (!uid) {
