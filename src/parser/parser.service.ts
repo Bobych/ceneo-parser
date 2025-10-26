@@ -5,7 +5,6 @@ import { ConfigService } from '@nestjs/config';
 import { IExchangeRate } from '@/interfaces/ExchangeRateInterface';
 import { ParserConfig } from '@/config/parser.config';
 import { GoogleService } from '@/google/google.service';
-import { LoggerService } from '@/logger/logger.service';
 import { StatusService } from '@/status/status.service';
 import { ENV } from '@/constants';
 import { CaptchaService } from '@/captcha/captcha.service';
@@ -15,6 +14,7 @@ import { ProductDto } from '@/parser/dto/product.dto';
 import { ProductService } from './product.service';
 import { sleep } from '@/utils/sleep';
 import { QueueService } from '@/queue/queue.service';
+import { JobContextService } from '@/queue/job-context.service';
 
 @Injectable()
 export class ParserService {
@@ -23,17 +23,22 @@ export class ParserService {
     constructor(
         private readonly config: ConfigService,
         private readonly google: GoogleService,
-        private readonly logger: LoggerService,
         private readonly status: StatusService,
         private readonly captcha: CaptchaService,
         private readonly browser: BrowserService,
         private readonly productService: ProductService,
         private readonly queueService: QueueService,
+        private readonly jobContext: JobContextService,
     ) {}
 
-    private log(message: string) {
-        console.log(message);
-        return this.logger.set({ service: 'parser', message });
+    private async log(message: string) {
+        const job = this.jobContext.getJob();
+
+        if (job) {
+            await job.log(`[${new Date().toISOString()}] ${message}`);
+        } else {
+            console.log(message);
+        }
     }
 
     private formUidName(uid: string, name: string) {
