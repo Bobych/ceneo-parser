@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Worker, Job } from 'bullmq';
-import { QUEUE_PARSER_NAME } from '@/constants';
+import { QUEUE_PARSER_CONCURRENCY, QUEUE_PARSER_NAME } from '@/constants';
 import { ParserService } from '@/parser/parser.service';
 import { JobContextService } from '@/queue/job-context.service';
 
@@ -22,7 +22,7 @@ export class ParserWorker {
             },
             {
                 connection: { host: 'localhost', port: 6379 },
-                concurrency: 3,
+                concurrency: QUEUE_PARSER_CONCURRENCY,
             },
         );
     }

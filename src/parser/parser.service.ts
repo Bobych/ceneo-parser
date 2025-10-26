@@ -6,7 +6,7 @@ import { IExchangeRate } from '@/interfaces/ExchangeRateInterface';
 import { ParserConfig } from '@/config/parser.config';
 import { GoogleService } from '@/google/google.service';
 import { StatusService } from '@/status/status.service';
-import { ENV } from '@/constants';
+import { ENV, QUEUE_PARSER_CONCURRENCY } from '@/constants';
 import { CaptchaService } from '@/captcha/captcha.service';
 import { BrowserService } from '@/browser/browser.service';
 import { fixUrl } from '@/utils/fixUrl';
@@ -53,8 +53,8 @@ export class ParserService {
         setInterval(async () => {
             const activeJobs = await this.queueService.getActiveJobsCount();
 
-            if (activeJobs >= 3) return;
-            const availableSlots = 3 - activeJobs;
+            if (activeJobs >= QUEUE_PARSER_CONCURRENCY) return;
+            const availableSlots = QUEUE_PARSER_CONCURRENCY - activeJobs;
             for (let i = 0; i < availableSlots; i++) {
                 await this.scheduleNextUid();
             }
