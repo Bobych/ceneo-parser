@@ -21,3 +21,7 @@ export const enum ENV {
 }
 
 export const DEFAULT_SLEEP_MS = 75;
+
+export const QUEUE_PARSER_NAME = 'QUEUE_PARSER' as const;
+export const QUEUE_PARSER_JOB_NAME = 'QUEUE_PARSER_JOB' as const;
+export const QUEUE_PARSER_JOB_ID_NAME = (uid: string) => `QUEUE_PARSER_JOB_ID_${uid}` as const;

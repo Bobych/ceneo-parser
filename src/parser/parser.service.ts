@@ -14,6 +14,7 @@ import { fixUrl } from '@/utils/fixUrl';
 import { ProductDto } from '@/parser/dto/product.dto';
 import { ProductService } from './product.service';
 import { sleep } from '@/utils/sleep';
+import { QueueService } from '@/queue/queue.service';
 
 @Injectable()
 export class ParserService {
@@ -27,9 +28,11 @@ export class ParserService {
         private readonly captcha: CaptchaService,
         private readonly browser: BrowserService,
         private readonly productService: ProductService,
+        private readonly queueService: QueueService,
     ) {}
 
     private log(message: string) {
+        console.log(message);
         return this.logger.set({ service: 'parser', message });
     }
 
@@ -38,7 +41,30 @@ export class ParserService {
     }
 
     async onModuleInit() {
-        this.enter();
+        this.enterWithQueue();
+    }
+
+    private async enterWithQueue() {
+        setInterval(async () => {
+            const activeJobs = await this.queueService.getActiveJobsCount();
+
+            if (activeJobs >= 3) return;
+            const availableSlots = 3 - activeJobs;
+            for (let i = 0; i < availableSlots; i++) {
+                await this.scheduleNextUid();
+            }
+        }, 10000);
+    }
+
+    private async scheduleNextUid() {
+        try {
+            const uid = await this.google.getLastUid();
+
+            await this.queueService.addParseJob(uid);
+            await this.google.increaseLastUid();
+        } catch (error) {
+            console.error('Error scheduling job:', error);
+        }
     }
 
     async enter() {
@@ -85,6 +111,39 @@ export class ParserService {
             const nextButton = document.querySelector('.pagination .pagination__next');
             return nextButton ? 'https://www.ceneo.pl' + nextButton.getAttribute('href') : null;
         });
+    }
+
+    async parseWithUid(uid: string) {
+        const googleRowData = await this.google.getUidRow(uid);
+
+        const uidName = this.formUidName(googleRowData.uid, googleRowData.name);
+        const url = googleRowData.url;
+
+        await this.log(`Перехожу к Google Row: ${url}`);
+
+        await this.status.set({
+            type: 'googlerow',
+            data: uidName,
+        });
+
+        if (url !== '---') {
+            console.log('теперь тут');
+            await this.parseFullCategory(uidName, url);
+        } else {
+            try {
+                await this.productService.removeSheetName(uidName);
+                await this.productService.saveProduct({
+                    name: '',
+                    sheetName: uidName,
+                    price: null,
+                    externalId: null,
+                    flag: false,
+                    url: '',
+                });
+            } catch (error) {
+                console.log('[ERROR] Saving empty category: ', error);
+            }
+        }
     }
 
     async parse() {
