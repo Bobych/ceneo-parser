@@ -17,12 +17,25 @@ export class ParserWorker {
             async (job: Job) => {
                 await this.jobContextService.runWithJob(job, async () => {
                     const { uid } = job.data;
-                    await this.parserService.parseWithUid(uid);
+                    const progressInterval = setInterval(async () => {
+                        await this.parserService.updateJobProgress({
+                            status: 'parsing',
+                            lastActivity: new Date().toISOString(),
+                        });
+                    }, 25000);
+
+                    try {
+                        await this.parserService.parseWithUid(uid);
+                    } finally {
+                        clearInterval(progressInterval);
+                    }
                 });
             },
             {
                 connection: { host: 'localhost', port: 6379 },
                 concurrency: QUEUE_PARSER_CONCURRENCY,
+                lockDuration: 3 * 60 * 60 * 1000,
+                stalledInterval: 5 * 60 * 1000,
             },
         );
     }

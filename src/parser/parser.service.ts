@@ -40,6 +40,18 @@ export class ParserService {
         console.log(message);
     }
 
+    async updateJobProgress(extraData?: any) {
+        const job = this.jobContext.getJob();
+
+        if (job) {
+            await job.updateProgress({
+                timestamp: Date.now(),
+                uid: job.data.uid,
+                ...extraData,
+            });
+        }
+    }
+
     private formUidName(uid: string, name: string) {
         return `${uid}_${name}`;
     }
