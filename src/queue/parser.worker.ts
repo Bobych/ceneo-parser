@@ -39,8 +39,6 @@ export class ParserWorker {
             {
                 connection: { host: 'localhost', port: 6379 },
                 concurrency: QUEUE_PARSER_CONCURRENCY,
-                lockDuration: 60 * 60 * 1000,
-                stalledInterval: 5 * 60 * 1000,
             },
         );
     }
