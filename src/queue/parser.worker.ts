@@ -21,10 +21,9 @@ export class ParserWorker {
                     try {
                         await this.parserService.parseWithUid(uid);
                         await job.log(`SUCCESSFULLY ENDED: ${uid}`);
-                        await job.moveToCompleted('success', undefined);
                     } catch (error) {
                         await job.log(`FAILED: ${uid}`);
-                        await job.moveToFailed(error, undefined);
+                        throw error;
                     }
                 });
             },
