@@ -143,7 +143,6 @@ export class ParserService {
 
         if (url !== '---') {
             await this.parseFullCategory(uidName, url);
-            await this.log('SUCCESSFULLY ENDED');
         } else {
             try {
                 await this.productService.removeSheetName(uidName);
@@ -210,6 +209,7 @@ export class ParserService {
                 url = await this.getNextUrl(page);
             } catch (error) {
                 await this.log(`Ошибка при парсинге страницы категории: ${error}`);
+                throw error;
             } finally {
                 await this.browser.closePage(page);
             }

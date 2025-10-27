@@ -26,6 +26,11 @@ export class ParserWorker {
 
                     try {
                         await this.parserService.parseWithUid(uid);
+                        await job.log(`SUCCESSFULLY ENDED: ${uid}`);
+                        await job.moveToCompleted('success', undefined);
+                    } catch (error) {
+                        await job.log(`FAILED: ${uid}`);
+                        await job.moveToFailed(error, undefined);
                     } finally {
                         clearInterval(progressInterval);
                     }
@@ -34,7 +39,7 @@ export class ParserWorker {
             {
                 connection: { host: 'localhost', port: 6379 },
                 concurrency: QUEUE_PARSER_CONCURRENCY,
-                lockDuration: 3 * 60 * 60 * 1000,
+                lockDuration: 60 * 60 * 1000,
                 stalledInterval: 5 * 60 * 1000,
             },
         );
