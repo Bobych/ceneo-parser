@@ -49,15 +49,16 @@ export class ParserService {
     }
 
     private async enterWithQueue() {
-        setInterval(async () => {
+        try {
             const activeJobs = await this.queueService.getActiveJobsCount();
-
-            if (activeJobs >= QUEUE_PARSER_CONCURRENCY) return;
-            const availableSlots = QUEUE_PARSER_CONCURRENCY - activeJobs;
-            for (let i = 0; i < availableSlots; i++) {
+            if (activeJobs < QUEUE_PARSER_CONCURRENCY * 2) {
                 await this.scheduleNextUid();
             }
-        }, 10000);
+        } catch (error) {
+            await this.log(`Глобальная ошибка в scheduleNextUid(): ${error}`);
+        } finally {
+            setTimeout(() => this.enterWithQueue(), 30000);
+        }
     }
 
     private async scheduleNextUid() {
