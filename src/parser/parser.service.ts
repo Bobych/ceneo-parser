@@ -299,7 +299,18 @@ export class ParserService {
         url: string,
     ): Promise<Pick<ProductDto, 'name' | 'price' | 'flag'>> {
         try {
+            await this.updateJobProgress({
+                stage: 'parsing_product',
+                productUrl: url,
+                timestamp: Date.now(),
+            });
+
             await this.openUrl(page, url);
+
+            await this.updateJobProgress({
+                stage: 'page_loaded',
+                status: 'analyzing_offers',
+            });
 
             const count = await page.$$eval(
                 ParserConfig.productClasses.offer,
@@ -309,6 +320,11 @@ export class ParserService {
             if (count === 0) {
                 return null;
             }
+
+            await this.updateJobProgress({
+                stage: 'offers_found',
+                offersCount: count,
+            });
 
             const offers = await page.$$eval(
                 ParserConfig.productClasses.offer,
@@ -352,6 +368,11 @@ export class ParserService {
                 ParserConfig.productClasses,
             );
 
+            await this.updateJobProgress({
+                stage: 'offers_processed',
+                validOffers: offers.length,
+            });
+
             const name = await page.$eval(
                 ParserConfig.productClasses.name,
                 el => el.textContent?.trim() || '',
@@ -366,6 +387,11 @@ export class ParserService {
             if (price === null) {
                 flag = false;
             }
+
+            await this.updateJobProgress({
+                stage: 'product_parsed',
+                result: { name, price, flag },
+            });
 
             return {
                 name: name,
