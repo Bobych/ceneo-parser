@@ -73,7 +73,12 @@ export class ParserService {
 
     private async scheduleNextUid() {
         try {
-            const uid = await this.google.getLastUid();
+            let uid = await this.google.getLastUid();
+
+            if (!uid) {
+                uid = '1';
+                await this.google.setLastUid('1');
+            }
 
             await this.queueService.addParseJob(uid);
             await this.google.increaseLastUid();
