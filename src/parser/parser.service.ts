@@ -5,7 +5,6 @@ import { ConfigService } from '@nestjs/config';
 import { IExchangeRate } from '@/interfaces/ExchangeRateInterface';
 import { ParserConfig } from '@/config/parser.config';
 import { GoogleService } from '@/google/google.service';
-import { StatusService } from '@/status/status.service';
 import { ENV, QUEUE_PARSER_CONCURRENCY } from '@/constants';
 import { CaptchaService } from '@/captcha/captcha.service';
 import { BrowserService } from '@/browser/browser.service';
@@ -23,7 +22,6 @@ export class ParserService {
     constructor(
         private readonly config: ConfigService,
         private readonly google: GoogleService,
-        private readonly status: StatusService,
         private readonly captcha: CaptchaService,
         private readonly browser: BrowserService,
         private readonly productService: ProductService,
@@ -138,11 +136,6 @@ export class ParserService {
 
         await this.log(`Перехожу к Google Row: ${url}`);
 
-        await this.status.set({
-            type: 'googlerow',
-            data: uidName,
-        });
-
         if (url !== '---') {
             await this.parseFullCategory(uidName, url);
         } else {
@@ -170,13 +163,13 @@ export class ParserService {
 
         await this.log(`Перехожу к Google Row: ${url}`);
 
-        await this.status.set({
-            type: 'googlerow',
-            data: uidName,
-        });
-
-        if (url !== '---') await this.parseFullCategory(uidName, url);
-        else {
+        if (url !== '---') {
+            try {
+                await this.parseFullCategory(uidName, url);
+            } catch (error) {
+                throw error;
+            }
+        } else {
             try {
                 await this.productService.removeSheetName(uidName);
                 await this.productService.saveProduct({
@@ -220,7 +213,6 @@ export class ParserService {
     async parseCategoryPage(page: Page, url: string): Promise<ProductDto[] | null> {
         try {
             await this.openUrl(page, url);
-            await this.status.set({ type: 'categorypage', data: url });
             await this.waitFor(page, ParserConfig.categoryClasses.category);
 
             return await page.$$eval(
@@ -303,10 +295,6 @@ export class ParserService {
         try {
             await this.openUrl(page, url);
 
-            await this.status.set({
-                type: 'product',
-                data: url,
-            });
             const count = await page.$$eval(
                 ParserConfig.productClasses.offer,
                 elements => elements.length,
