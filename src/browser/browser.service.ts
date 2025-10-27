@@ -29,7 +29,6 @@ export class BrowserService implements OnModuleDestroy {
         await page.setUserAgent(this.userAgent);
         this.onUserAgent += 1;
         page.setDefaultNavigationTimeout(60000);
-        page.on('console', msg => console.log('BROWSER LOG>', msg.text()));
 
         return page;
     }

@@ -13,5 +13,4 @@ export const BrowserConfig = {
         '--enable-unsafe-swiftshader',
     ],
     protocolTimeout: 120000,
-    // dumpio: true,
 };
