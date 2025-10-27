@@ -73,12 +73,7 @@ export class ParserService {
 
     private async scheduleNextUid() {
         try {
-            let uid = await this.google.getLastUid();
-
-            if (!uid) {
-                uid = '1';
-                await this.google.setLastUid('1');
-            }
+            const uid = await this.google.getLastUid();
 
             await this.queueService.addParseJob(uid);
             await this.google.increaseLastUid();
@@ -135,6 +130,11 @@ export class ParserService {
 
     async parseWithUid(uid: string) {
         const googleRowData = await this.google.getUidRow(uid);
+
+        if (!googleRowData) {
+            await this.google.setLastUid('1');
+            throw Error('[GO TO FIRST LINE]');
+        }
 
         const uidName = this.formUidName(googleRowData.uid, googleRowData.name);
         const url = googleRowData.url;
