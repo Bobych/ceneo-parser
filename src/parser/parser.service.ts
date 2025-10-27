@@ -142,12 +142,8 @@ export class ParserService {
         await this.log(`Перехожу к Google Row: ${url}`);
 
         if (url !== '---') {
-            try {
-                await this.parseFullCategory(uidName, url);
-                await this.log('SUCCESSFULLY ENDED');
-            } catch (error) {
-                throw error;
-            }
+            await this.parseFullCategory(uidName, url);
+            await this.log('SUCCESSFULLY ENDED');
         } else {
             try {
                 await this.productService.removeSheetName(uidName);
