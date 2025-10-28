@@ -214,7 +214,7 @@ export class ParserService {
             } finally {
                 const { id } = this.jobContext.getJob();
                 await this.browser.closePage(page, id);
-                await this.browser.close();
+                await this.browser.releaseBrowserForJob(id);
             }
         }
     }
