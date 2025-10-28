@@ -50,9 +50,7 @@ export class BrowserService implements OnModuleDestroy {
         try {
             const page = await browser.newPage();
             const userAgent = this.userAgents.get(browser) || getRandomUserAgent();
-            await page.setUserAgent({
-                userAgent,
-            });
+            await page.setUserAgent(userAgent);
             page.setDefaultNavigationTimeout(60000);
             return page;
         } catch (error) {
