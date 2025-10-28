@@ -12,9 +12,10 @@ export class QueueService {
             defaultJobOptions: {
                 removeOnComplete: 1000,
                 removeOnFail: 1000,
-                attempts: 3,
+                attempts: 5,
                 backoff: {
                     type: 'exponential',
+                    delay: 10000,
                 },
             },
         });

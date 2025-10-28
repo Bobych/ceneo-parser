@@ -212,6 +212,7 @@ export class ParserService {
                 throw error;
             } finally {
                 await this.browser.closePage(page);
+                await this.browser.close();
             }
         }
     }
