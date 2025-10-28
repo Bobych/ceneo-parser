@@ -7,61 +7,135 @@ import { getRandomUserAgent } from '@/utils/getRandomUserAgent';
 
 @Injectable()
 export class BrowserService implements OnModuleDestroy {
-    private browser: Browser | null = null;
-    private userAgent: string | null = null;
-    private onUserAgent: number = 0;
+    private browsers: Map<string, Browser> = new Map();
+    private userAgents: Map<Browser, string> = new Map();
+    private availableBrowsers: Browser[] = [];
+    private maxBrowsers = 3;
 
     constructor() {
         puppeteer.use(StealthPlugin());
     }
 
-    async launch() {
-        if (this.browser) return;
-        this.browser = await puppeteer.launch(BrowserConfig);
-        this.rotateUserAgent(true);
+    async getBrowserForJob(jobId: string): Promise<Browser> {
+        if (this.browsers.has(jobId)) {
+            return this.browsers.get(jobId)!;
+        }
+
+        let browser = this.availableBrowsers.shift();
+
+        if (!browser) {
+            if (this.browsers.size < this.maxBrowsers) {
+                browser = await this.createBrowser();
+            } else {
+                browser = await this.waitForAvailableBrowser();
+            }
+        }
+
+        this.browsers.set(jobId, browser);
+        return browser;
     }
 
-    async createPage(): Promise<Page> {
-        if (!this.browser) await this.launch();
-
-        const page = await this.browser.newPage();
-
-        await page.setUserAgent(this.userAgent);
-        this.onUserAgent += 1;
-        page.setDefaultNavigationTimeout(60000);
-
-        return page;
+    async releaseBrowserForJob(jobId: string): Promise<void> {
+        const browser = this.browsers.get(jobId);
+        if (browser) {
+            this.browsers.delete(jobId);
+            this.availableBrowsers.push(browser);
+        }
     }
 
-    async closePage(page: Page) {
+    async createPage(jobId: string): Promise<Page> {
+        const browser = await this.getBrowserForJob(jobId);
+
         try {
-            if (page && !page.isClosed()) await page.close();
+            const page = await browser.newPage();
+            const userAgent = this.userAgents.get(browser) || getRandomUserAgent();
+
+            await page.setUserAgent(userAgent);
+            page.setDefaultNavigationTimeout(60000);
+
+            return page;
+        } catch (error) {
+            await this.replaceBrowser(browser);
+            throw error;
+        }
+    }
+
+    async closePage(page: Page, jobId: string) {
+        try {
+            if (page && !page.isClosed()) {
+                await page.close();
+            }
         } catch (e) {
             console.error('Failed to close page:', e);
         }
     }
 
-    async close() {
-        try {
-            if (this.browser) {
-                await this.browser.close();
-                this.browser = null;
+    private async createBrowser(): Promise<Browser> {
+        const browser = await puppeteer.launch(BrowserConfig);
+        this.userAgents.set(browser, getRandomUserAgent());
+        return browser;
+    }
+
+    private async waitForAvailableBrowser(): Promise<Browser> {
+        const timeout = 30000;
+        const startTime = Date.now();
+
+        while (Date.now() - startTime < timeout) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            if (this.availableBrowsers.length > 0) {
+                return this.availableBrowsers.shift()!;
             }
-        } catch (e) {
-            console.error('Failed to close browser:', e);
         }
+
+        throw new Error('No available browsers in pool');
+    }
+
+    private async replaceBrowser(oldBrowser: Browser): Promise<void> {
+        try {
+            await oldBrowser.close();
+        } catch (e) {
+            console.error('Failed to close old browser:', e);
+        }
+
+        this.userAgents.delete(oldBrowser);
+        const availableIndex = this.availableBrowsers.indexOf(oldBrowser);
+        if (availableIndex !== -1) {
+            this.availableBrowsers.splice(availableIndex, 1);
+        }
+
+        for (const [jobId, browser] of this.browsers) {
+            if (browser === oldBrowser) {
+                this.browsers.delete(jobId);
+            }
+        }
+
+        const newBrowser = await this.createBrowser();
+        this.availableBrowsers.push(newBrowser);
     }
 
     rotateUserAgent(force?: boolean) {
-        if (!force) {
-            if (this.onUserAgent >= 10000) {
-                this.userAgent = getRandomUserAgent();
-                this.onUserAgent = 0;
+        for (const browser of [...this.browsers.values(), ...this.availableBrowsers]) {
+            if (force) {
+                this.userAgents.set(browser, getRandomUserAgent());
             }
-            return;
         }
-        this.userAgent = getRandomUserAgent();
-        this.onUserAgent = 0;
+    }
+
+    async close() {
+        const allBrowsers = [...this.browsers.values(), ...this.availableBrowsers];
+        await Promise.all(
+            allBrowsers.map(async browser => {
+                try {
+                    await browser.close();
+                } catch (e) {
+                    console.error('Failed to close browser:', e);
+                }
+            }),
+        );
+
+        this.browsers.clear();
+        this.availableBrowsers = [];
+        this.userAgents.clear();
     }
 
     async onModuleDestroy() {

@@ -199,7 +199,8 @@ export class ParserService {
             let page: Page | null = null;
 
             try {
-                page = await this.browser.createPage();
+                const { id } = this.jobContext.getJob();
+                page = await this.browser.createPage(id);
                 const productsOnPage = await this.parseCategoryPage(page, url);
 
                 if (!productsOnPage) continue;
@@ -211,7 +212,8 @@ export class ParserService {
                 await this.log(`Ошибка при парсинге страницы категории: ${error}`);
                 throw error;
             } finally {
-                await this.browser.closePage(page);
+                const { id } = this.jobContext.getJob();
+                await this.browser.closePage(page, id);
                 await this.browser.close();
             }
         }
@@ -262,7 +264,8 @@ export class ParserService {
             let page: Page | null = null;
 
             try {
-                page = await this.browser.createPage();
+                const { id } = this.jobContext.getJob();
+                page = await this.browser.createPage(id);
                 const pr = await this.getProduct(page, product.url);
                 if (!pr) {
                     i++;
@@ -286,7 +289,8 @@ export class ParserService {
             } catch (error) {
                 await this.log(`Ошибка при парсинге продукта: ${product.url} - ${error}`);
             } finally {
-                await this.browser.closePage(page);
+                const { id } = this.jobContext.getJob();
+                await this.browser.closePage(page, id);
             }
         }
 
