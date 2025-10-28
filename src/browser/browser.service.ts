@@ -18,7 +18,9 @@ export class BrowserService implements OnModuleDestroy {
 
     async getBrowserForJob(jobId: string): Promise<Browser> {
         if (this.browsers.has(jobId)) {
-            return this.browsers.get(jobId)!;
+            const browser = this.browsers.get(jobId)!;
+            if (browser.connected) return browser;
+            else await this.replaceBrowser(browser);
         }
 
         let browser = this.availableBrowsers.shift();
@@ -45,16 +47,16 @@ export class BrowserService implements OnModuleDestroy {
 
     async createPage(jobId: string): Promise<Page> {
         const browser = await this.getBrowserForJob(jobId);
-
         try {
             const page = await browser.newPage();
             const userAgent = this.userAgents.get(browser) || getRandomUserAgent();
-
-            await page.setUserAgent(userAgent);
+            await page.setUserAgent({
+                userAgent,
+            });
             page.setDefaultNavigationTimeout(60000);
-
             return page;
         } catch (error) {
+            console.error(`[BrowserService] Browser crashed for job ${jobId}, replacing...`);
             await this.replaceBrowser(browser);
             throw error;
         }
