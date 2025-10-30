@@ -30,11 +30,6 @@ export class ParserService {
     ) {}
 
     private async log(message: string) {
-        const job = this.jobContext.getJob();
-
-        if (job) {
-            await job.log(`[${new Date().toISOString()}] ${message}`);
-        }
         console.log(message);
     }
 
