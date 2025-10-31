@@ -10,8 +10,8 @@ export class QueueService {
         this.queue = new Queue(QUEUE_PARSER_NAME, {
             connection: { host: 'localhost', port: 6379 },
             defaultJobOptions: {
-                removeOnComplete: 1000,
-                removeOnFail: 1000,
+                removeOnComplete: 100,
+                removeOnFail: 100,
                 attempts: 5,
                 backoff: {
                     type: 'exponential',
