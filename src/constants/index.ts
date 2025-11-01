@@ -26,3 +26,5 @@ export const QUEUE_PARSER_NAME = 'QUEUE_PARSER' as const;
 export const QUEUE_PARSER_JOB_NAME = 'QUEUE_PARSER_JOB' as const;
 export const QUEUE_PARSER_JOB_ID_NAME = (uid: string) => `QUEUE_PARSER_JOB_ID_${uid}` as const;
 export const QUEUE_PARSER_CONCURRENCY = 3 as const;
+
+export const PUPPETEER_USER_DATA_DIR_PATH = '/tmp/puppeteer_profiles' as const;

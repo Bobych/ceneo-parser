@@ -4,6 +4,9 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { Browser, Page } from 'puppeteer';
 import { BrowserConfig } from '@/config/browser.config';
 import { getRandomUserAgent } from '@/utils/getRandomUserAgent';
+import { PUPPETEER_USER_DATA_DIR_PATH } from '@/constants';
+import fs from 'fs-extra';
+import path from 'path';
 
 @Injectable()
 export class BrowserService implements OnModuleDestroy {
@@ -71,6 +74,15 @@ export class BrowserService implements OnModuleDestroy {
     }
 
     private async createBrowser(): Promise<Browser> {
+        const tmpPath = PUPPETEER_USER_DATA_DIR_PATH;
+        await fs.ensureDir(tmpPath);
+
+        const dirs = await fs.readdir(tmpPath);
+        for (const dir of dirs) {
+            const fullPath = path.join(tmpPath, dir);
+            await fs.remove(fullPath).catch(() => {});
+        }
+
         const browser = await puppeteer.launch(BrowserConfig);
         this.userAgents.set(browser, getRandomUserAgent());
         return browser;

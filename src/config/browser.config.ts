@@ -1,4 +1,7 @@
-export const BrowserConfig = {
+import { LaunchOptions } from 'puppeteer';
+import { PUPPETEER_USER_DATA_DIR_PATH } from '@/constants';
+
+export const BrowserConfig: LaunchOptions = {
     headless: true,
     executablePath: '/usr/bin/chromium-browser',
     args: [
@@ -13,4 +16,5 @@ export const BrowserConfig = {
         '--enable-unsafe-swiftshader',
     ],
     protocolTimeout: 120000,
+    userDataDir: PUPPETEER_USER_DATA_DIR_PATH,
 };
