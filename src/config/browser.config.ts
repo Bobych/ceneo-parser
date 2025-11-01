@@ -1,7 +1,5 @@
-import { LaunchOptions } from 'puppeteer';
-
-export const BrowserConfig: LaunchOptions = {
-    headless: true,
+export const BrowserConfig = {
+    headless: 'new',
     executablePath: '/usr/bin/chromium-browser',
     args: [
         '--disable-gpu',
@@ -13,6 +11,8 @@ export const BrowserConfig: LaunchOptions = {
         '--disable-dev-shm-usage',
         '--no-zygote',
         '--enable-unsafe-swiftshader',
+        '--no-first-run',
+        '--single-process',
     ],
     protocolTimeout: 120000,
 };

@@ -1,161 +1,262 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { Browser, Page } from 'puppeteer';
+import { Page } from 'puppeteer';
+import { Cluster } from 'puppeteer-cluster';
 import { BrowserConfig } from '@/config/browser.config';
 import { getRandomUserAgent } from '@/utils/getRandomUserAgent';
-import { randomUUID } from 'node:crypto';
-import * as os from 'node:os';
-import fs from 'fs-extra';
-import path from 'path';
 
-interface BrowserData {
-    browser: Browser;
-    userDataDir: string;
-    busy: boolean;
+export interface ClusterTaskData {
+    url?: string;
+    userAgent?: string;
+    jobId?: string;
+    [key: string]: any;
+}
+
+interface PageWithData {
+    page: Page;
+    data: ClusterTaskData;
 }
 
 @Injectable()
-export class BrowserService implements OnModuleDestroy {
-    private browsers: Map<string, BrowserData> = new Map(); // JobId -> BrowserData
-    private availableBrowsers: BrowserData[] = [];
-    private userAgents: Map<Browser, string> = new Map();
-    private maxBrowsers = 3;
+export class BrowserService implements OnModuleInit, OnModuleDestroy {
+    private cluster: Cluster<ClusterTaskData, PageWithData> | null = null;
+    private isInitialized = false;
+    private maxConcurrency = 3;
 
     constructor() {
         puppeteer.use(StealthPlugin());
     }
 
-    private async createBrowser(): Promise<BrowserData> {
-        const userDataDir = path.join(os.tmpdir(), 'puppeteer_profile_' + randomUUID());
-        await fs.ensureDir(userDataDir);
-
-        const browser = await puppeteer.launch({ ...BrowserConfig, userDataDir });
-
-        const bd: BrowserData = { browser, userDataDir, busy: false };
-        this.userAgents.set(browser, getRandomUserAgent());
-
-        return bd;
+    async onModuleInit() {
+        await this.initializeCluster();
     }
 
-    private async waitForAvailableBrowser(): Promise<BrowserData> {
-        const timeout = 30000;
-        const startTime = Date.now();
+    private async initializeCluster(): Promise<void> {
+        if (this.isInitialized) return;
 
-        while (Date.now() - startTime < timeout) {
-            const freeBrowser = this.availableBrowsers.find(b => !b.busy);
-            if (freeBrowser) {
-                freeBrowser.busy = true;
-                return freeBrowser;
-            }
-            await new Promise(r => setTimeout(r, 500));
-        }
-
-        throw new Error('No available browsers in pool');
-    }
-
-    async getBrowserForJob(jobId: string): Promise<Browser> {
-        if (this.browsers.has(jobId)) {
-            const bd = this.browsers.get(jobId)!;
-            if (bd.browser.connected) {
-                bd.busy = true;
-                return bd.browser;
-            } else {
-                await this.replaceBrowser(bd);
-            }
-        }
-
-        let bd = this.availableBrowsers.find(b => !b.busy);
-        if (bd) {
-            bd.busy = true;
-        } else if (this.browsers.size + this.availableBrowsers.length < this.maxBrowsers) {
-            bd = await this.createBrowser();
-        } else {
-            bd = await this.waitForAvailableBrowser();
-        }
-
-        this.browsers.set(jobId, bd);
-        return bd.browser;
-    }
-
-    async releaseBrowserForJob(jobId: string): Promise<void> {
-        const bd = this.browsers.get(jobId);
-        if (bd) {
-            bd.busy = false;
-        }
-    }
-
-    async createPage(jobId: string): Promise<Page> {
-        const browser = await this.getBrowserForJob(jobId);
         try {
-            const page = await browser.newPage();
-            const userAgent = this.userAgents.get(browser) || getRandomUserAgent();
-            await page.setUserAgent(userAgent);
-            page.setDefaultNavigationTimeout(60000);
-            return page;
-        } catch (err) {
-            console.error(`[BrowserService] Browser crashed for job ${jobId}, replacing...`);
-            const bd = this.browsers.get(jobId)!;
-            await this.replaceBrowser(bd);
-            throw err;
+            console.log('[BrowserService] Initializing puppeteer-cluster...');
+
+            this.cluster = await Cluster.launch({
+                puppeteer: puppeteer,
+                maxConcurrency: this.maxConcurrency,
+                workerCreationDelay: 1000,
+                timeout: 60000,
+                retryLimit: 2,
+                retryDelay: 5000,
+                skipDuplicateUrls: false,
+                sameDomainDelay: 1000,
+                puppeteerOptions: {
+                    ...BrowserConfig,
+                    headless: 'new',
+                },
+            });
+
+            this.setupClusterEventHandlers();
+
+            await this.cluster.task(async ({ page, data }): Promise<PageWithData> => {
+                await this.setupPage(page, data);
+                return { page, data };
+            });
+
+            this.isInitialized = true;
+            console.log(`[BrowserService] Cluster initialized with ${this.maxConcurrency} workers`);
+        } catch (error) {
+            console.error('[BrowserService] Failed to initialize cluster:', error);
+            throw error;
         }
     }
 
-    async closePage(page: Page) {
+    private setupClusterEventHandlers(): void {
+        if (!this.cluster) return;
+
+        this.cluster.on('taskerror', (err, data) => {
+            console.error(`[BrowserService] Task error for job ${data.jobId}:`, err.message);
+        });
+
+        this.cluster.on('workercreated', worker => {
+            console.log(`[BrowserService] Worker created: ${worker.id}`);
+        });
+
+        this.cluster.on('workerdestroyed', worker => {
+            console.log(`[BrowserService] Worker destroyed: ${worker.id}`);
+        });
+    }
+
+    private async setupPage(page: Page, data: ClusterTaskData): Promise<void> {
+        const userAgent = data.userAgent || getRandomUserAgent();
+
+        await page.setUserAgent(userAgent);
+        await page.setDefaultNavigationTimeout(60000);
+        await page.setDefaultTimeout(30000);
+        await page.setViewport({ width: 1366, height: 768, deviceScaleFactor: 1 });
+
+        await page.evaluateOnNewDocument(() => {
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => false,
+            });
+
+            (window as any).chrome = {
+                runtime: {},
+                loadTimes: () => {},
+                csi: () => {},
+                app: {},
+            };
+
+            const originalQuery = window.navigator.permissions.query;
+            (window.navigator as any).permissions.query = (parameters: any) =>
+                parameters.name === 'notifications'
+                    ? Promise.resolve({ state: Notification.permission } as any)
+                    : originalQuery(parameters);
+
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5],
+            });
+
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['ru-RU', 'ru', 'en-US', 'en'],
+            });
+        });
+
+        await page.setExtraHTTPHeaders({
+            'accept-language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+        });
+    }
+
+    /**
+     * Выполняет задачу в кластере
+     */
+    async executeTask<T>(
+        task: (page: Page, data: ClusterTaskData) => Promise<T>,
+        data: ClusterTaskData = {},
+    ): Promise<T> {
+        if (!this.isInitialized || !this.cluster) {
+            await this.initializeCluster();
+        }
+
+        const taskData: ClusterTaskData = {
+            jobId: data.jobId || `job_${Date.now()}`,
+            userAgent: getRandomUserAgent(),
+            ...data,
+        };
+
+        try {
+            const result = await this.cluster!.execute(taskData);
+            return await task(result.page, result.data);
+        } catch (error) {
+            console.error(
+                `[BrowserService] Task execution failed for job ${taskData.jobId}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    /**
+     * Создает отдельную страницу для длительных операций
+     */
+    async createPage(jobId?: string): Promise<{ page: Page; close: () => Promise<void> }> {
+        if (!this.isInitialized || !this.cluster) {
+            await this.initializeCluster();
+        }
+
+        const taskData: ClusterTaskData = {
+            jobId: jobId || `page_${Date.now()}`,
+            userAgent: getRandomUserAgent(),
+        };
+
+        const result = await this.cluster!.execute(taskData);
+
+        return {
+            page: result.page,
+            close: async () => {
+                try {
+                    if (!result.page.isClosed()) {
+                        await result.page.close();
+                    }
+                } catch (error) {
+                    console.error('Failed to close page:', error);
+                }
+            },
+        };
+    }
+
+    /**
+     * Закрывает страницу
+     */
+    async closePage(page: Page): Promise<void> {
         if (!page || page.isClosed()) return;
+
         try {
             await page.close();
-        } catch (e) {
-            console.error('Failed to close page:', e);
+        } catch (error) {
+            console.error('Failed to close page:', error);
         }
     }
 
-    private async replaceBrowser(bd: BrowserData): Promise<void> {
-        try {
-            await bd.browser.close();
-        } catch (e) {
-            console.error('Failed to close old browser:', e);
+    /**
+     * Получает статистику кластера
+     */
+    getClusterStats() {
+        if (!this.cluster) {
+            return {
+                isInitialized: false,
+                queueSize: 0,
+                idle: true,
+                workers: 0,
+            };
         }
 
-        // Удаляем tmpDir через маленькую задержку, чтобы Chrome успел закрыть сокеты
-        setTimeout(() => fs.remove(bd.userDataDir).catch(() => {}), 500);
+        // Правильное получение размера очереди через кластер
+        const clusterAny = this.cluster as any;
+        const queueSize = clusterAny.waitingTargets ? clusterAny.waitingTargets.size : 0;
 
-        this.userAgents.delete(bd.browser);
-        this.availableBrowsers = this.availableBrowsers.filter(b => b.browser !== bd.browser);
-
-        for (const [jobId, entry] of this.browsers) {
-            if (entry.browser === bd.browser) this.browsers.delete(jobId);
-        }
-
-        const newBd = await this.createBrowser();
-        this.availableBrowsers.push(newBd);
+        return {
+            isInitialized: this.isInitialized,
+            queueSize: queueSize,
+            idle: this.cluster.idle,
+            workers: this.maxConcurrency,
+        };
     }
 
-    rotateUserAgent(force?: boolean) {
-        for (const bd of [...this.availableBrowsers, ...this.browsers.values()]) {
-            if (force) this.userAgents.set(bd.browser, getRandomUserAgent());
-        }
-    }
-
-    async close() {
-        const all = [...this.availableBrowsers, ...this.browsers.values()];
-        await Promise.all(
-            all.map(async bd => {
-                try {
-                    await bd.browser.close();
-                } catch (e) {
-                    console.error('Failed to close browser:', e);
-                }
-                await fs.remove(bd.userDataDir).catch(() => {});
-            }),
+    /**
+     * Освобождает браузер для job
+     */
+    async releaseBrowserForJob(jobId: string): Promise<void> {
+        console.log(
+            `[BrowserService] Browser release for job ${jobId} - handled automatically by cluster`,
         );
-
-        this.browsers.clear();
-        this.availableBrowsers = [];
-        this.userAgents.clear();
     }
 
-    async onModuleDestroy() {
+    /**
+     * Перезапускает кластер
+     */
+    async restartCluster(): Promise<void> {
+        console.log('[BrowserService] Restarting cluster...');
+        await this.close();
+        await this.initializeCluster();
+    }
+
+    /**
+     * Закрывает кластер
+     */
+    async close(): Promise<void> {
+        if (this.cluster) {
+            try {
+                console.log('[BrowserService] Closing cluster...');
+                await this.cluster.idle();
+                await this.cluster.close();
+            } catch (error) {
+                console.error('[BrowserService] Error closing cluster:', error);
+            } finally {
+                this.cluster = null;
+                this.isInitialized = false;
+            }
+        }
+    }
+
+    async onModuleDestroy(): Promise<void> {
         await this.close();
     }
 }

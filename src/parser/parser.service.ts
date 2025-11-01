@@ -100,7 +100,6 @@ export class ParserService {
         ]);
 
         await this.log(`Открыл: ${url}`);
-        await this.browser.rotateUserAgent();
         await this.captcha.checkCaptcha(page);
     }
 
@@ -111,7 +110,6 @@ export class ParserService {
             await this.log(`Успешно дождался селектора: ${selector}.`);
             return;
         } catch (error) {
-            await this.browser.rotateUserAgent(true);
             throw new Error(`Не удалось дождаться селектора ${selector} попытки. Ошибка: ${error}`);
         }
     }
@@ -189,32 +187,36 @@ export class ParserService {
 
     async parseFullCategory(sheetName: string, url: string) {
         await this.getExchangeRates();
+
         while (url) {
             url = await fixUrl(url);
-            let page: Page | null = null;
 
             try {
-                const { id } = this.jobContext.getJob();
-                page = await this.browser.createPage(id);
-                const productsOnPage = await this.parseCategoryPage(page, url);
+                const productsOnPage = await this.browser.executeTask(
+                    async (page, data) => {
+                        return await this.parseCategoryPageInternal(page, data.url);
+                    },
+                    { url, jobId: this.jobContext.getJob().id },
+                );
 
                 if (!productsOnPage) continue;
 
                 await this.parseProducts(productsOnPage, sheetName);
 
-                url = await this.getNextUrl(page);
+                url = await this.browser.executeTask(
+                    async (page, data) => {
+                        return await this.getNextUrl(page);
+                    },
+                    { url, jobId: this.jobContext.getJob().id },
+                );
             } catch (error) {
                 await this.log(`Ошибка при парсинге страницы категории: ${error}`);
                 continue;
-            } finally {
-                const { id } = this.jobContext.getJob();
-                await this.browser.closePage(page);
-                await this.browser.releaseBrowserForJob(id);
             }
         }
     }
 
-    async parseCategoryPage(page: Page, url: string): Promise<ProductDto[] | null> {
+    private async parseCategoryPageInternal(page: Page, url: string): Promise<ProductDto[] | null> {
         try {
             await this.openUrl(page, url);
             await this.waitFor(page, ParserConfig.categoryClasses.category);
@@ -256,15 +258,20 @@ export class ParserService {
 
         while (i < l) {
             const product = products[i];
-            let page: Page | null = null;
 
             try {
-                const { id } = this.jobContext.getJob();
-                page = await this.browser.createPage(id);
-                const pr = await this.getProduct(page, product.url);
+                const pr = await this.browser.executeTask(
+                    async (page, data) => {
+                        return await this.getProduct(page, data.productUrl);
+                    },
+                    {
+                        productUrl: product.url,
+                        jobId: this.jobContext.getJob().id,
+                    },
+                );
+
                 if (!pr) {
                     i++;
-                    // await this.browser.rotateUserAgent(true);
                     continue;
                 }
 
@@ -283,8 +290,7 @@ export class ParserService {
                 i++;
             } catch (error) {
                 await this.log(`Ошибка при парсинге продукта: ${product.url} - ${error}`);
-            } finally {
-                await this.browser.closePage(page);
+                i++;
             }
         }
 
@@ -293,10 +299,10 @@ export class ParserService {
             .map(p => [p.externalId, p.name, p.price, p.flag, p.url]);
     }
 
-    async getProduct(
+    private async getProduct(
         page: Page,
         url: string,
-    ): Promise<Pick<ProductDto, 'name' | 'price' | 'flag'>> {
+    ): Promise<Pick<ProductDto, 'name' | 'price' | 'flag'> | null> {
         try {
             await this.updateJobProgress({
                 stage: 'parsing_product',
