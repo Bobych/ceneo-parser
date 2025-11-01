@@ -208,7 +208,7 @@ export class ParserService {
                 continue;
             } finally {
                 const { id } = this.jobContext.getJob();
-                await this.browser.closePage(page, id);
+                await this.browser.closePage(page);
                 await this.browser.releaseBrowserForJob(id);
             }
         }
@@ -284,8 +284,7 @@ export class ParserService {
             } catch (error) {
                 await this.log(`Ошибка при парсинге продукта: ${product.url} - ${error}`);
             } finally {
-                const { id } = this.jobContext.getJob();
-                await this.browser.closePage(page, id);
+                await this.browser.closePage(page);
             }
         }
 
