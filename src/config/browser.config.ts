@@ -1,5 +1,4 @@
 import { LaunchOptions } from 'puppeteer';
-import { PUPPETEER_USER_DATA_DIR_PATH } from '@/constants';
 
 export const BrowserConfig: LaunchOptions = {
     headless: true,
@@ -16,5 +15,4 @@ export const BrowserConfig: LaunchOptions = {
         '--enable-unsafe-swiftshader',
     ],
     protocolTimeout: 120000,
-    userDataDir: PUPPETEER_USER_DATA_DIR_PATH,
 };
