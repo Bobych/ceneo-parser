@@ -12,45 +12,76 @@ import path from 'path';
 interface BrowserData {
     browser: Browser;
     userDataDir: string;
+    busy: boolean;
 }
 
 @Injectable()
 export class BrowserService implements OnModuleDestroy {
-    private browsers: Map<string, BrowserData> = new Map();
-    private userAgents: Map<Browser, string> = new Map();
+    private browsers: Map<string, BrowserData> = new Map(); // JobId -> BrowserData
     private availableBrowsers: BrowserData[] = [];
+    private userAgents: Map<Browser, string> = new Map();
     private maxBrowsers = 3;
 
     constructor() {
         puppeteer.use(StealthPlugin());
     }
 
-    async getBrowserForJob(jobId: string): Promise<Browser> {
-        if (this.browsers.has(jobId)) {
-            const { browser, userDataDir } = this.browsers.get(jobId)!;
-            if (browser.connected) return browser;
-            else await this.replaceBrowser(browser, userDataDir);
+    private async createBrowser(): Promise<BrowserData> {
+        const userDataDir = path.join(os.tmpdir(), 'puppeteer_profile_' + randomUUID());
+        await fs.ensureDir(userDataDir);
+
+        const browser = await puppeteer.launch({ ...BrowserConfig, userDataDir });
+
+        const bd: BrowserData = { browser, userDataDir, busy: false };
+        this.userAgents.set(browser, getRandomUserAgent());
+
+        return bd;
+    }
+
+    private async waitForAvailableBrowser(): Promise<BrowserData> {
+        const timeout = 30000;
+        const startTime = Date.now();
+
+        while (Date.now() - startTime < timeout) {
+            const freeBrowser = this.availableBrowsers.find(b => !b.busy);
+            if (freeBrowser) {
+                freeBrowser.busy = true;
+                return freeBrowser;
+            }
+            await new Promise(r => setTimeout(r, 500));
         }
 
-        let b = this.availableBrowsers.shift();
+        throw new Error('No available browsers in pool');
+    }
 
-        if (!b) {
-            if (this.browsers.size < this.maxBrowsers) {
-                b = await this.createBrowser();
+    async getBrowserForJob(jobId: string): Promise<Browser> {
+        if (this.browsers.has(jobId)) {
+            const bd = this.browsers.get(jobId)!;
+            if (bd.browser.connected) {
+                bd.busy = true;
+                return bd.browser;
             } else {
-                b = await this.waitForAvailableBrowser();
+                await this.replaceBrowser(bd);
             }
         }
 
-        this.browsers.set(jobId, b);
-        return b.browser;
+        let bd = this.availableBrowsers.find(b => !b.busy);
+        if (bd) {
+            bd.busy = true;
+        } else if (this.browsers.size + this.availableBrowsers.length < this.maxBrowsers) {
+            bd = await this.createBrowser();
+        } else {
+            bd = await this.waitForAvailableBrowser();
+        }
+
+        this.browsers.set(jobId, bd);
+        return bd.browser;
     }
 
     async releaseBrowserForJob(jobId: string): Promise<void> {
-        const browser = this.browsers.get(jobId);
-        if (browser) {
-            this.browsers.delete(jobId);
-            this.availableBrowsers.push(browser);
+        const bd = this.browsers.get(jobId);
+        if (bd) {
+            bd.busy = false;
         }
     }
 
@@ -62,82 +93,60 @@ export class BrowserService implements OnModuleDestroy {
             await page.setUserAgent(userAgent);
             page.setDefaultNavigationTimeout(60000);
             return page;
-        } catch (error) {
+        } catch (err) {
             console.error(`[BrowserService] Browser crashed for job ${jobId}, replacing...`);
-            const { userDataDir } = this.browsers.get(jobId)!;
-            await this.replaceBrowser(browser, userDataDir);
-            throw error;
+            const bd = this.browsers.get(jobId)!;
+            await this.replaceBrowser(bd);
+            throw err;
         }
     }
 
-    async closePage(page: Page, jobId: string) {
+    async closePage(page: Page) {
+        if (!page || page.isClosed()) return;
         try {
-            if (page && !page.isClosed()) {
-                await page.close();
-            }
+            await page.close();
         } catch (e) {
             console.error('Failed to close page:', e);
         }
     }
 
-    private async createBrowser(): Promise<BrowserData> {
-        const userDataDir = path.join(os.tmpdir(), 'puppeteer_profile_' + randomUUID());
-        await fs.ensureDir(userDataDir);
-
-        const browser = await puppeteer.launch({ ...BrowserConfig, userDataDir: userDataDir });
-
-        this.userAgents.set(browser, getRandomUserAgent());
-        return { browser, userDataDir };
-    }
-
-    private async waitForAvailableBrowser(): Promise<BrowserData> {
-        const timeout = 30000;
-        const startTime = Date.now();
-
-        while (Date.now() - startTime < timeout) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            if (this.availableBrowsers.length > 0) {
-                return this.availableBrowsers.shift()!;
-            }
-        }
-
-        throw new Error('No available browsers in pool');
-    }
-
-    private async replaceBrowser(oldBrowser: Browser, userDataDir: string): Promise<void> {
+    private async replaceBrowser(bd: BrowserData): Promise<void> {
         try {
-            await oldBrowser.close();
+            await bd.browser.close();
         } catch (e) {
             console.error('Failed to close old browser:', e);
         }
 
-        await fs.remove(userDataDir).catch(() => {});
-        this.userAgents.delete(oldBrowser);
-        this.availableBrowsers = this.availableBrowsers.filter(b => b.browser !== oldBrowser);
+        // Удаляем tmpDir через маленькую задержку, чтобы Chrome успел закрыть сокеты
+        setTimeout(() => fs.remove(bd.userDataDir).catch(() => {}), 500);
+
+        this.userAgents.delete(bd.browser);
+        this.availableBrowsers = this.availableBrowsers.filter(b => b.browser !== bd.browser);
+
         for (const [jobId, entry] of this.browsers) {
-            if (entry.browser === oldBrowser) this.browsers.delete(jobId);
+            if (entry.browser === bd.browser) this.browsers.delete(jobId);
         }
 
-        const newBrowser = await this.createBrowser();
-        this.availableBrowsers.push(newBrowser);
+        const newBd = await this.createBrowser();
+        this.availableBrowsers.push(newBd);
     }
 
     rotateUserAgent(force?: boolean) {
-        for (const { browser } of [...this.browsers.values(), ...this.availableBrowsers]) {
-            if (force) this.userAgents.set(browser, getRandomUserAgent());
+        for (const bd of [...this.availableBrowsers, ...this.browsers.values()]) {
+            if (force) this.userAgents.set(bd.browser, getRandomUserAgent());
         }
     }
 
     async close() {
-        const all = [...this.browsers.values(), ...this.availableBrowsers];
+        const all = [...this.availableBrowsers, ...this.browsers.values()];
         await Promise.all(
-            all.map(async ({ browser, userDataDir }) => {
+            all.map(async bd => {
                 try {
-                    await browser.close();
+                    await bd.browser.close();
                 } catch (e) {
                     console.error('Failed to close browser:', e);
                 }
-                await fs.remove(userDataDir).catch(() => {});
+                await fs.remove(bd.userDataDir).catch(() => {});
             }),
         );
 
