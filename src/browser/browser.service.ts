@@ -77,6 +77,7 @@ export class BrowserService implements OnModuleDestroy {
 
     private async createBrowser(): Promise<Browser> {
         const uid = randomUUID();
+        console.log('BROWSER UID: ', uid);
         const tmpProfileDir = join(tmpdir(), `puppeteer_${uid}`);
         fs.mkdirSync(tmpProfileDir, { recursive: true });
         const browser = await puppeteer.launch({
