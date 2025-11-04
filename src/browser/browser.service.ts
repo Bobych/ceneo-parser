@@ -1,67 +1,76 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { Browser, Page } from 'puppeteer';
+import { Browser, Page, BrowserContext } from 'puppeteer';
 import { BrowserConfig } from '@/config/browser.config';
 import { getRandomUserAgent } from '@/utils/getRandomUserAgent';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
-import fs from 'fs';
 
 @Injectable()
 export class BrowserService implements OnModuleDestroy {
-    private browsers: Map<string, Browser> = new Map();
-    private userAgents: Map<Browser, string> = new Map();
-    private availableBrowsers: Browser[] = [];
-    private maxBrowsers = 3;
+    private browser: Browser | null = null;
+    private contexts: Map<string, BrowserContext> = new Map();
+    private userAgents: Map<BrowserContext, string> = new Map();
+    private maxContexts = 3;
 
     constructor() {
         puppeteer.use(StealthPlugin());
     }
 
-    async getBrowserForJob(jobId: string): Promise<Browser> {
-        if (this.browsers.has(jobId)) {
-            const browser = this.browsers.get(jobId)!;
-            if (browser && browser.connected) return browser;
-            else await this.replaceBrowser(browser);
+    private async ensureBrowser(): Promise<Browser> {
+        if (!this.browser || !this.browser.connected) {
+            await this.createBrowser();
         }
+        return this.browser!;
+    }
 
-        let browser = this.availableBrowsers.shift();
-
-        if (!browser) {
-            if (this.browsers.size < this.maxBrowsers) {
-                browser = await this.createBrowser();
-            } else {
-                browser = await this.waitForAvailableBrowser();
+    async getContextForJob(jobId: string): Promise<BrowserContext> {
+        if (this.contexts.has(jobId)) {
+            const context = this.contexts.get(jobId)!;
+            try {
+                await context.pages();
+                return context;
+            } catch (e) {
+                this.contexts.delete(jobId);
+                this.userAgents.delete(context);
             }
         }
 
-        this.browsers.set(jobId, browser);
-        return browser;
+        if (this.contexts.size >= this.maxContexts) {
+            await this.cleanupOldContexts();
+        }
+
+        const browser = await this.ensureBrowser();
+        const context = await browser.createBrowserContext();
+        const userAgent = getRandomUserAgent();
+
+        this.contexts.set(jobId, context);
+        this.userAgents.set(context, userAgent);
+
+        return context;
     }
 
-    async releaseBrowserForJob(jobId: string): Promise<void> {
-        const browser = this.browsers.get(jobId);
-        if (browser) {
-            this.browsers.delete(jobId);
-            await browser.close();
+    async releaseContextForJob(jobId: string): Promise<void> {
+        const context = this.contexts.get(jobId);
+        if (context) {
+            this.contexts.delete(jobId);
+            this.userAgents.delete(context);
+            try {
+                await context.close();
+            } catch (e) {
+                console.error('Failed to close context:', e);
+            }
         }
     }
 
     async createPage(jobId: string): Promise<Page> {
-        const browser = await this.getBrowserForJob(jobId);
-        try {
-            const page = await browser.newPage();
-            const userAgent = this.userAgents.get(browser) || getRandomUserAgent();
-            await page.setUserAgent(userAgent);
-            page.setDefaultNavigationTimeout(60000);
-            return page;
-        } catch (error) {
-            console.error(`[BrowserService] Browser crashed for job ${jobId}, replacing...`);
-            await this.replaceBrowser(browser);
-            throw error;
-        }
+        const context = await this.getContextForJob(jobId);
+        const page = await context.newPage();
+        const userAgent = this.userAgents.get(context) || getRandomUserAgent();
+
+        await page.setUserAgent(userAgent);
+        page.setDefaultNavigationTimeout(60000);
+
+        return page;
     }
 
     async closePage(page: Page) {
@@ -74,87 +83,60 @@ export class BrowserService implements OnModuleDestroy {
         }
     }
 
-    private async createBrowser(): Promise<Browser> {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        const uid = `puppeteer_${process.pid}_${randomUUID()}`;
-        const tmpProfileDir = join(tmpdir(), uid);
-        fs.mkdirSync(tmpProfileDir, { recursive: true });
-        const browser = await puppeteer.launch({
-            ...BrowserConfig,
-            userDataDir: tmpProfileDir,
-        });
-        this.userAgents.set(browser, getRandomUserAgent());
+    private async createBrowser(): Promise<void> {
+        this.browser = await puppeteer.launch(BrowserConfig);
 
-        browser.on('disconnected', () => {
-            fs.rmSync(tmpProfileDir, { recursive: true, force: true });
+        this.browser.on('disconnected', () => {
+            this.browser = null;
+            this.contexts.clear();
+            this.userAgents.clear();
         });
-
-        return browser;
     }
 
-    private async waitForAvailableBrowser(): Promise<Browser> {
-        const timeout = 30000;
-        const startTime = Date.now();
-
-        while (Date.now() - startTime < timeout) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            if (this.availableBrowsers.length > 0) {
-                return this.availableBrowsers.shift()!;
-            }
+    private async cleanupOldContexts(): Promise<void> {
+        const firstJobId = this.contexts.keys().next().value;
+        if (firstJobId) {
+            await this.releaseContextForJob(firstJobId);
         }
-
-        throw new Error('No available browsers in pool');
-    }
-
-    private async replaceBrowser(oldBrowser: Browser): Promise<void> {
-        try {
-            await oldBrowser.close();
-        } catch (e) {
-            console.error('Failed to close old browser:', e);
-        }
-
-        this.userAgents.delete(oldBrowser);
-        const availableIndex = this.availableBrowsers.indexOf(oldBrowser);
-        if (availableIndex !== -1) {
-            this.availableBrowsers.splice(availableIndex, 1);
-        }
-
-        for (const [jobId, browser] of this.browsers) {
-            if (browser === oldBrowser) {
-                this.browsers.delete(jobId);
-            }
-        }
-
-        const newBrowser = await this.createBrowser();
-        this.availableBrowsers.push(newBrowser);
     }
 
     rotateUserAgent(force?: boolean) {
-        for (const browser of [...this.browsers.values(), ...this.availableBrowsers]) {
+        for (const context of this.contexts.values()) {
             if (force) {
-                this.userAgents.set(browser, getRandomUserAgent());
+                this.userAgents.set(context, getRandomUserAgent());
             }
         }
     }
 
     async close() {
-        const allBrowsers = [...this.browsers.values(), ...this.availableBrowsers];
-        await Promise.all(
-            allBrowsers.map(async browser => {
-                try {
-                    await browser.close();
-                } catch (e) {
-                    console.error('Failed to close browser:', e);
-                }
-            }),
+        const closePromises = Array.from(this.contexts.keys()).map(jobId =>
+            this.releaseContextForJob(jobId),
         );
 
-        this.browsers.clear();
-        this.availableBrowsers = [];
+        await Promise.all(closePromises);
+
+        if (this.browser) {
+            try {
+                await this.browser.close();
+            } catch (e) {
+                console.error('Failed to close browser:', e);
+            }
+            this.browser = null;
+        }
+
+        this.contexts.clear();
         this.userAgents.clear();
     }
 
     async onModuleDestroy() {
         await this.close();
+    }
+
+    getStats() {
+        return {
+            browserConnected: !!this.browser?.connected,
+            activeContexts: this.contexts.size,
+            maxContexts: this.maxContexts,
+        };
     }
 }

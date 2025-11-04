@@ -213,7 +213,7 @@ export class ParserService {
                 }
             }
         } finally {
-            await this.browser.releaseBrowserForJob(id);
+            await this.browser.releaseContextForJob(id);
         }
     }
 
@@ -287,7 +287,6 @@ export class ParserService {
             } catch (error) {
                 await this.log(`Ошибка при парсинге продукта: ${product.url} - ${error}`);
             } finally {
-                const { id } = this.jobContext.getJob();
                 await this.browser.closePage(page);
             }
         }
