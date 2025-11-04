@@ -11,6 +11,7 @@ export const BrowserConfig = {
         '--disable-dev-shm-usage',
         '--no-zygote',
         '--enable-unsafe-swiftshader',
+        '--single-process',
     ],
     protocolTimeout: 120000,
 };
