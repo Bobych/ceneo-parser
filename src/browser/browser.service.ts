@@ -84,8 +84,8 @@ export class BrowserService implements OnModuleDestroy {
     }
 
     private async createBrowser(): Promise<void> {
+        if (this.browser) return;
         this.browser = await puppeteer.launch(BrowserConfig);
-
         this.browser.on('disconnected', () => {
             this.browser = null;
             this.contexts.clear();
