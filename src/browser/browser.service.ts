@@ -23,8 +23,7 @@ export class BrowserService implements OnModuleDestroy {
     async getBrowserForJob(jobId: string): Promise<Browser> {
         if (this.browsers.has(jobId)) {
             const browser = this.browsers.get(jobId)!;
-            if (browser && browser.connected && browser.process()?.exitCode !== null)
-                return browser;
+            if (browser && browser.connected) return browser;
             else await this.replaceBrowser(browser);
         }
 
@@ -77,8 +76,18 @@ export class BrowserService implements OnModuleDestroy {
 
     private async createBrowser(): Promise<Browser> {
         await new Promise(resolve => setTimeout(resolve, 100));
-        const browser = await puppeteer.launch(BrowserConfig);
+        const uid = `puppeteer_${process.pid}_${randomUUID()}`;
+        const tmpProfileDir = join(tmpdir(), uid);
+        fs.mkdirSync(tmpProfileDir, { recursive: true });
+        const browser = await puppeteer.launch({
+            ...BrowserConfig,
+            userDataDir: tmpProfileDir,
+        });
         this.userAgents.set(browser, getRandomUserAgent());
+
+        browser.on('disconnected', () => {
+            fs.rmSync(tmpProfileDir, { recursive: true, force: true });
+        });
 
         return browser;
     }

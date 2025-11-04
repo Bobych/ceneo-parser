@@ -17,7 +17,6 @@ export class ParserWorker {
             async (job: Job) => {
                 await this.jobContextService.runWithJob(job, async () => {
                     const { uid } = job.data;
-                    console.log('JOB UID: ', uid);
 
                     try {
                         await this.parserService.parseWithUid(uid);
