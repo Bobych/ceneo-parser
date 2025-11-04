@@ -26,23 +26,10 @@ export class ParserService {
         private readonly browser: BrowserService,
         private readonly productService: ProductService,
         private readonly queueService: QueueService,
-        private readonly jobContext: JobContextService,
     ) {}
 
     private async log(message: string) {
         console.log(message);
-    }
-
-    async updateJobProgress(extraData?: any) {
-        const job = this.jobContext.getJob();
-
-        if (job) {
-            await job.updateProgress({
-                timestamp: Date.now(),
-                uid: job.data.uid,
-                ...extraData,
-            });
-        }
     }
 
     private formUidName(uid: string, name: string) {
@@ -123,7 +110,7 @@ export class ParserService {
         });
     }
 
-    async parseWithUid(uid: string) {
+    async parseWithUid(uid: string, jobId: string) {
         const googleRowData = await this.google.getUidRow(uid);
 
         if (!googleRowData) {
@@ -137,7 +124,7 @@ export class ParserService {
         await this.log(`Перехожу к Google Row: ${url}`);
 
         if (url !== '---') {
-            await this.parseFullCategory(uidName, url);
+            await this.parseFullCategory(uidName, url, jobId);
         } else {
             try {
                 await this.productService.removeSheetName(uidName);
@@ -187,21 +174,19 @@ export class ParserService {
         await this.google.increaseLastUid();
     }
 
-    async parseFullCategory(sheetName: string, url: string) {
+    async parseFullCategory(sheetName: string, url: string, jobId?: string) {
         await this.getExchangeRates();
-        const { id } = this.jobContext.getJob();
         while (url) {
             url = await fixUrl(url);
             let page: Page | null = null;
 
             try {
-                const { id } = this.jobContext.getJob();
-                page = await this.browser.createPage(id);
+                page = await this.browser.createPage(jobId);
                 const productsOnPage = await this.parseCategoryPage(page, url);
 
                 if (!productsOnPage) continue;
 
-                await this.parseProducts(productsOnPage, sheetName);
+                await this.parseProducts(productsOnPage, sheetName, jobId);
 
                 url = await this.getNextUrl(page);
             } catch (error) {
@@ -209,7 +194,7 @@ export class ParserService {
                 url = null;
             } finally {
                 await this.browser.closePage(page);
-                await this.browser.releaseContextForJob(id);
+                await this.browser.releaseContextForJob(jobId);
             }
         }
     }
@@ -250,7 +235,7 @@ export class ParserService {
         }
     }
 
-    async parseProducts(products: ProductDto[], sheetName: string) {
+    async parseProducts(products: ProductDto[], sheetName: string, jobId: string) {
         let i = 0;
         const l = products.length;
 
@@ -259,12 +244,10 @@ export class ParserService {
             let page: Page | null = null;
 
             try {
-                const { id } = this.jobContext.getJob();
-                page = await this.browser.createPage(id);
+                page = await this.browser.createPage(jobId);
                 const pr = await this.getProduct(page, product.url);
                 if (!pr) {
                     i++;
-                    // await this.browser.rotateUserAgent(true);
                     continue;
                 }
 
@@ -298,18 +281,7 @@ export class ParserService {
         url: string,
     ): Promise<Pick<ProductDto, 'name' | 'price' | 'flag'>> {
         try {
-            await this.updateJobProgress({
-                stage: 'parsing_product',
-                productUrl: url,
-                timestamp: Date.now(),
-            });
-
             await this.openUrl(page, url);
-
-            await this.updateJobProgress({
-                stage: 'page_loaded',
-                status: 'analyzing_offers',
-            });
 
             const count = await page.$$eval(
                 ParserConfig.productClasses.offer,
@@ -319,11 +291,6 @@ export class ParserService {
             if (count === 0) {
                 return null;
             }
-
-            await this.updateJobProgress({
-                stage: 'offers_found',
-                offersCount: count,
-            });
 
             const offers = await page.$$eval(
                 ParserConfig.productClasses.offer,
@@ -367,11 +334,6 @@ export class ParserService {
                 ParserConfig.productClasses,
             );
 
-            await this.updateJobProgress({
-                stage: 'offers_processed',
-                validOffers: offers.length,
-            });
-
             const name = await page.$eval(
                 ParserConfig.productClasses.name,
                 el => el.textContent?.trim() || '',
@@ -386,11 +348,6 @@ export class ParserService {
             if (price === null) {
                 flag = false;
             }
-
-            await this.updateJobProgress({
-                stage: 'product_parsed',
-                result: { name, price, flag },
-            });
 
             return {
                 name: name,

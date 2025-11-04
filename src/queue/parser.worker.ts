@@ -17,9 +17,10 @@ export class ParserWorker {
             async (job: Job) => {
                 await this.jobContextService.runWithJob(job, async () => {
                     const { uid } = job.data;
+                    const jobId = job.id;
 
                     try {
-                        await this.parserService.parseWithUid(uid);
+                        await this.parserService.parseWithUid(uid, jobId);
                         await job.log(`SUCCESSFULLY ENDED: ${uid}`);
                     } catch (error) {
                         await job.log(`FAILED: ${uid}`);
