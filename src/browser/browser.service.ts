@@ -4,10 +4,10 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { Browser, Page } from 'puppeteer';
 import { BrowserConfig } from '@/config/browser.config';
 import { getRandomUserAgent } from '@/utils/getRandomUserAgent';
-import { mkdtempSync } from 'node:fs';
-import path from 'path';
 import { tmpdir } from 'node:os';
-import fs from 'fs/promises';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import fs from 'fs';
 
 @Injectable()
 export class BrowserService implements OnModuleDestroy {
@@ -76,12 +76,18 @@ export class BrowserService implements OnModuleDestroy {
     }
 
     private async createBrowser(): Promise<Browser> {
-        const tmpProfileDir = mkdtempSync(path.join(tmpdir(), 'puppeteer_profile_'));
+        const tmpProfileDir = join(tmpdir(), `puppeteer_${randomUUID()}`);
+        fs.mkdirSync(tmpProfileDir, { recursive: true });
         const browser = await puppeteer.launch({
             ...BrowserConfig,
             userDataDir: tmpProfileDir,
         });
         this.userAgents.set(browser, getRandomUserAgent());
+
+        browser.on('disconnected', () => {
+            fs.rmSync(tmpProfileDir, { recursive: true, force: true });
+        });
+
         return browser;
     }
 
@@ -100,12 +106,8 @@ export class BrowserService implements OnModuleDestroy {
     }
 
     private async replaceBrowser(oldBrowser: Browser): Promise<void> {
-        const tmpDir = (oldBrowser.process()?.spawnargs || []).find(arg =>
-            arg.includes('puppeteer_profile_'),
-        );
         try {
             await oldBrowser.close();
-            if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
         } catch (e) {
             console.error('Failed to close old browser:', e);
         }
