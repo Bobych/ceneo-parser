@@ -4,6 +4,10 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { Browser, Page } from 'puppeteer';
 import { BrowserConfig } from '@/config/browser.config';
 import { getRandomUserAgent } from '@/utils/getRandomUserAgent';
+import { mkdtempSync } from 'node:fs';
+import path from 'path';
+import { tmpdir } from 'node:os';
+import fs from 'fs/promises';
 
 @Injectable()
 export class BrowserService implements OnModuleDestroy {
@@ -19,7 +23,8 @@ export class BrowserService implements OnModuleDestroy {
     async getBrowserForJob(jobId: string): Promise<Browser> {
         if (this.browsers.has(jobId)) {
             const browser = this.browsers.get(jobId)!;
-            if (browser.connected) return browser;
+            if (browser && browser.connected && browser.process()?.exitCode !== null)
+                return browser;
             else await this.replaceBrowser(browser);
         }
 
@@ -60,7 +65,7 @@ export class BrowserService implements OnModuleDestroy {
         }
     }
 
-    async closePage(page: Page, jobId: string) {
+    async closePage(page: Page) {
         try {
             if (page && !page.isClosed()) {
                 await page.close();
@@ -71,7 +76,11 @@ export class BrowserService implements OnModuleDestroy {
     }
 
     private async createBrowser(): Promise<Browser> {
-        const browser = await puppeteer.launch(BrowserConfig);
+        const tmpProfileDir = mkdtempSync(path.join(tmpdir(), 'puppeteer_profile_'));
+        const browser = await puppeteer.launch({
+            ...BrowserConfig,
+            userDataDir: tmpProfileDir,
+        });
         this.userAgents.set(browser, getRandomUserAgent());
         return browser;
     }
@@ -91,8 +100,12 @@ export class BrowserService implements OnModuleDestroy {
     }
 
     private async replaceBrowser(oldBrowser: Browser): Promise<void> {
+        const tmpDir = (oldBrowser.process()?.spawnargs || []).find(arg =>
+            arg.includes('puppeteer_profile_'),
+        );
         try {
             await oldBrowser.close();
+            if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
         } catch (e) {
             console.error('Failed to close old browser:', e);
         }

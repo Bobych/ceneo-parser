@@ -205,7 +205,7 @@ export class ParserService {
                 url = await this.getNextUrl(page);
             } catch (error) {
                 await this.log(`Ошибка при парсинге страницы категории: ${error}`);
-                throw error;
+                url = null;
             } finally {
                 const { id } = this.jobContext.getJob();
                 await this.browser.closePage(page, id);
