@@ -190,30 +190,27 @@ export class ParserService {
     async parseFullCategory(sheetName: string, url: string) {
         await this.getExchangeRates();
         const { id } = this.jobContext.getJob();
-        try {
-            while (url) {
-                url = await fixUrl(url);
-                let page: Page | null = null;
+        while (url) {
+            url = await fixUrl(url);
+            let page: Page | null = null;
 
-                try {
-                    const { id } = this.jobContext.getJob();
-                    page = await this.browser.createPage(id);
-                    const productsOnPage = await this.parseCategoryPage(page, url);
+            try {
+                const { id } = this.jobContext.getJob();
+                page = await this.browser.createPage(id);
+                const productsOnPage = await this.parseCategoryPage(page, url);
 
-                    if (!productsOnPage) continue;
+                if (!productsOnPage) continue;
 
-                    await this.parseProducts(productsOnPage, sheetName);
+                await this.parseProducts(productsOnPage, sheetName);
 
-                    url = await this.getNextUrl(page);
-                } catch (error) {
-                    await this.log(`Ошибка при парсинге страницы категории: ${error}`);
-                    url = null;
-                } finally {
-                    await this.browser.closePage(page);
-                }
+                url = await this.getNextUrl(page);
+            } catch (error) {
+                await this.log(`Ошибка при парсинге страницы категории: ${error}`);
+                url = null;
+            } finally {
+                await this.browser.closePage(page);
+                await this.browser.releaseContextForJob(id);
             }
-        } finally {
-            await this.browser.releaseContextForJob(id);
         }
     }
 
