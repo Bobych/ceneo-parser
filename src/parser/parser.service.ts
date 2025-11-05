@@ -1,4 +1,4 @@
-import { Page } from 'puppeteer';
+import { Browser, Page } from 'puppeteer';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -23,7 +23,7 @@ export class ParserService {
         private readonly config: ConfigService,
         private readonly google: GoogleService,
         private readonly captcha: CaptchaService,
-        private readonly browser: BrowserService,
+        private readonly browserService: BrowserService,
         private readonly productService: ProductService,
         private readonly queueService: QueueService,
         private readonly jobContext: JobContextService,
@@ -91,16 +91,12 @@ export class ParserService {
         await sleep();
         await this.log(`Пытаюсь открыть: ${url}`);
 
-        await Promise.all([
-            page.goto(url),
-            page.waitForNavigation({
-                waitUntil: ['domcontentloaded'],
-                timeout: 20000,
-            }),
-        ]);
-
+        await this.browserService.rotateUserAgent(page);
+        await page.goto(url, {
+            waitUntil: ['domcontentloaded'],
+            timeout: 20000,
+        });
         await this.log(`Открыл: ${url}`);
-        await this.browser.rotateUserAgent();
         await this.captcha.checkCaptcha(page);
     }
 
@@ -111,7 +107,7 @@ export class ParserService {
             await this.log(`Успешно дождался селектора: ${selector}.`);
             return;
         } catch (error) {
-            await this.browser.rotateUserAgent(true);
+            await this.browserService.rotateUserAgent(page, true);
             throw new Error(`Не удалось дождаться селектора ${selector} попытки. Ошибка: ${error}`);
         }
     }
@@ -189,28 +185,35 @@ export class ParserService {
 
     async parseFullCategory(sheetName: string, url: string) {
         await this.getExchangeRates();
-        while (url) {
-            url = await fixUrl(url);
-            let page: Page | null = null;
+        let browser: Browser | null = null;
 
-            try {
-                const { id } = this.jobContext.getJob();
-                page = await this.browser.createPage(id);
-                const productsOnPage = await this.parseCategoryPage(page, url);
+        try {
+            browser = await this.browserService.acquireBrowser();
 
-                if (!productsOnPage) continue;
+            while (url) {
+                url = await fixUrl(url);
+                let page: Page | null = null;
 
-                await this.parseProducts(productsOnPage, sheetName);
+                try {
+                    page = await this.browserService.createPage(browser);
+                    const productsOnPage = await this.parseCategoryPage(page, url);
 
-                url = await this.getNextUrl(page);
-            } catch (error) {
-                await this.log(`Ошибка при парсинге страницы категории: ${error}`);
-                throw error;
-            } finally {
-                const { id } = this.jobContext.getJob();
-                await this.browser.closePage(page, id);
-                await this.browser.releaseBrowserForJob(id);
+                    if (!productsOnPage) continue;
+
+                    await this.parseProducts(productsOnPage, sheetName, browser);
+
+                    url = await this.getNextUrl(page);
+                } catch (error) {
+                    await this.log(`Ошибка при парсинге страницы категории: ${error}`);
+                    url = null;
+                } finally {
+                    await this.browserService.closePage(page);
+                }
             }
+        } catch (error) {
+            console.error(error);
+        } finally {
+            if (browser) await this.browserService.releaseBrowser(browser);
         }
     }
 
@@ -250,7 +253,7 @@ export class ParserService {
         }
     }
 
-    async parseProducts(products: ProductDto[], sheetName: string) {
+    async parseProducts(products: ProductDto[], sheetName: string, browser: Browser) {
         let i = 0;
         const l = products.length;
 
@@ -259,8 +262,7 @@ export class ParserService {
             let page: Page | null = null;
 
             try {
-                const { id } = this.jobContext.getJob();
-                page = await this.browser.createPage(id);
+                page = await this.browserService.createPage(browser);
                 const pr = await this.getProduct(page, product.url);
                 if (!pr) {
                     i++;
@@ -284,8 +286,7 @@ export class ParserService {
             } catch (error) {
                 await this.log(`Ошибка при парсинге продукта: ${product.url} - ${error}`);
             } finally {
-                const { id } = this.jobContext.getJob();
-                await this.browser.closePage(page, id);
+                await this.browserService.closePage(page);
             }
         }
 
