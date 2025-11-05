@@ -10,7 +10,7 @@ services:
       - ./redis.conf:/usr/local/etc/redis/redis.conf
     networks:
       - ceneo-net
-    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    entrypoint: ["/bin/sh", "-c", "chown -R 999:999 /data && chmod -R 770 /data && exec redis-server --appendonly yes"]
 
 networks:
   ceneo-net:
