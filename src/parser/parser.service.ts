@@ -91,7 +91,7 @@ export class ParserService {
         await sleep();
         await this.log(`Пытаюсь открыть: ${url}`);
 
-        await this.browserService.rotateUserAgent(page);
+        // await this.browserService.rotateUserAgent(page);
         await page.goto(url, {
             waitUntil: ['domcontentloaded'],
             timeout: 20000,
@@ -185,35 +185,26 @@ export class ParserService {
 
     async parseFullCategory(sheetName: string, url: string) {
         await this.getExchangeRates();
-        let browser: Browser | null = null;
 
         try {
-            browser = await this.browserService.acquireBrowser();
-
             while (url) {
                 url = await fixUrl(url);
-                let page: Page | null = null;
+                await this.browserService.runTask(async page => {
+                    try {
+                        await this.openUrl(page, url);
+                        const productsOnPage = await this.parseCategoryPage(page, url);
+                        if (!productsOnPage) return;
 
-                try {
-                    page = await this.browserService.createPage(browser);
-                    const productsOnPage = await this.parseCategoryPage(page, url);
-
-                    if (!productsOnPage) continue;
-
-                    await this.parseProducts(productsOnPage, sheetName, browser);
-
-                    url = await this.getNextUrl(page);
-                } catch (error) {
-                    await this.log(`Ошибка при парсинге страницы категории: ${error}`);
-                    url = null;
-                } finally {
-                    await this.browserService.closePage(page);
-                }
+                        await this.parseProducts(productsOnPage, sheetName);
+                        url = await this.getNextUrl(page);
+                    } catch (error) {
+                        await this.log(`Ошибка при парсинге страницы категории: ${error}`);
+                        url = null;
+                    }
+                });
             }
         } catch (error) {
             console.error(error);
-        } finally {
-            if (browser) await this.browserService.releaseBrowser(browser);
         }
     }
 
@@ -253,46 +244,67 @@ export class ParserService {
         }
     }
 
-    async parseProducts(products: ProductDto[], sheetName: string, browser: Browser) {
-        let i = 0;
-        const l = products.length;
+    async parseProducts(products: ProductDto[], sheetName: string) {
+        const results: any[] = [];
 
-        while (i < l) {
-            const product = products[i];
-            let page: Page | null = null;
+        await this.browserService.runTask(async clusterPage => {
+            const browser = clusterPage.browser();
 
-            try {
-                page = await this.browserService.createPage(browser);
-                const pr = await this.getProduct(page, product.url);
-                if (!pr) {
+            let i = 0;
+            const l = products.length;
+
+            while (i < l) {
+                const product = products[i];
+                let page: Page | null = null;
+
+                try {
+                    page = await browser.newPage();
+
+                    // await this.browserService.rotateUserAgent(page);
+
+                    page.setDefaultNavigationTimeout(60000);
+
+                    const pr = await this.getProduct(page, product.url);
+
+                    if (!pr) {
+                        i++;
+                        continue;
+                    }
+
+                    product.name = pr.name;
+                    product.price = pr.price;
+                    product.flag = pr.flag;
+                    product.sheetName = sheetName;
+
+                    if (this.exchangeRate !== 0 && pr.price) {
+                        const priceInPLN = pr.price;
+                        product.price = parseFloat((priceInPLN / this.exchangeRate).toFixed(2));
+                    }
+
+                    await this.productService.saveProduct(product);
+
                     i++;
-                    // await this.browser.rotateUserAgent(true);
-                    continue;
+                } catch (error) {
+                    await this.log(`Ошибка при парсинге продукта: ${product.url} - ${error}`);
+                } finally {
+                    try {
+                        if (page && !page.isClosed()) {
+                            await page.close();
+                        }
+                    } catch (err) {
+                        console.error('[parseProducts] failed to close page:', err);
+                    }
                 }
-
-                product.name = pr.name;
-                product.price = pr.price;
-                product.flag = pr.flag;
-                product.sheetName = sheetName;
-
-                if (this.exchangeRate !== 0 && pr.price) {
-                    const priceInPLN = pr.price;
-                    product.price = parseFloat((priceInPLN / this.exchangeRate).toFixed(2));
-                }
-
-                await this.productService.saveProduct(product);
-
-                i++;
-            } catch (error) {
-                await this.log(`Ошибка при парсинге продукта: ${product.url} - ${error}`);
-            } finally {
-                await this.browserService.closePage(page);
             }
-        }
 
-        return products
-            .filter(p => p.name.trim() !== '')
-            .map(p => [p.externalId, p.name, p.price, p.flag, p.url]);
+            for (const p of products) {
+                if (p.name && p.name.trim() !== '') {
+                    results.push([p.externalId, p.name, p.price, p.flag, p.url]);
+                }
+            }
+        });
+
+        return results;
     }
 
     async getProduct(
