@@ -1,46 +1,49 @@
-import { Injectable } from '@nestjs/common';
-import { Browser, Page } from 'puppeteer';
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Page } from 'puppeteer';
 import puppeteer from 'puppeteer-extra';
+import puppeteer_core from 'puppeteer-core';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import generic_pool from 'generic-pool';
 import { getRandomUserAgent } from '@/utils/getRandomUserAgent';
 import { BrowserConfig } from '@/config/browser.config';
+import { Cluster } from 'puppeteer-cluster';
+import { QUEUE_PARSER_CONCURRENCY } from '@/constants';
+
+puppeteer.use(StealthPlugin());
 
 @Injectable()
-export class BrowserService {
-    private pool: generic_pool.Pool<Browser>;
-    private browser: Browser | undefined;
+export class BrowserService implements OnModuleInit, OnModuleDestroy {
+    private cluster: Cluster<any, any>;
 
-    constructor() {
-        puppeteer.use(StealthPlugin());
-
-        this.pool = generic_pool.createPool(
-            {
-                create: async () => await puppeteer.launch(BrowserConfig),
-                destroy: async browser => browser.close(),
-            },
-            {
-                max: 5,
-                min: 1,
-                idleTimeoutMillis: 30000,
-            },
-        );
+    async onModuleInit() {
+        this.cluster = await Cluster.launch({
+            puppeteer: puppeteer_core,
+            concurrency: Cluster.CONCURRENCY_BROWSER,
+            maxConcurrency: QUEUE_PARSER_CONCURRENCY,
+            puppeteerOptions: BrowserConfig,
+            timeout: 180000,
+            monitor: false,
+        });
     }
 
-    async acquireBrowser(): Promise<Browser> {
-        return await this.pool.acquire();
+    async onModuleDestroy() {
+        if (this.cluster) {
+            await this.cluster.idle();
+            await this.cluster.close();
+        }
     }
 
-    async releaseBrowser(browser: Browser) {
-        await this.pool.release(browser);
-    }
-
-    async createPage(browser: Browser): Promise<Page> {
-        const page = await browser.newPage();
-        const ua = getRandomUserAgent();
-        await page.setUserAgent(ua);
-        page.setDefaultNavigationTimeout(60000);
+    async createPage(): Promise<Page> {
+        const { page } = await this.cluster.execute(async ({ page }) => page);
         return page;
+    }
+
+    async runTask<T>(handler: (page: Page) => Promise<T>): Promise<T> {
+        return this.cluster.execute(async ({ page }) => {
+            const ua = getRandomUserAgent();
+            await page.setUserAgent(ua);
+            page.setDefaultNavigationTimeout(60000);
+            return handler(page);
+        });
     }
 
     async closePage(page: Page) {
@@ -53,7 +56,7 @@ export class BrowserService {
         }
     }
 
-    async rotateUserAgent(page?: Page, force = false): Promise<string> {
+    async rotateUserAgent(page: Page, force = false): Promise<string> {
         const ua = getRandomUserAgent();
         if (page) {
             const currentUA = await page.evaluate(() => navigator.userAgent).catch(() => null);
@@ -62,10 +65,5 @@ export class BrowserService {
             }
         }
         return ua;
-    }
-
-    async onModuleDestroy() {
-        await this.pool.drain();
-        await this.pool.clear();
     }
 }
