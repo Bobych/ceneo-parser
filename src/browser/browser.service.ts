@@ -42,8 +42,6 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
 
     async runTask<T>(handler: (page: Page) => Promise<T>): Promise<T> {
         return this.cluster.execute(async ({ page }) => {
-            const ua = getRandomUserAgent();
-            await page.setUserAgent(ua);
             page.setDefaultNavigationTimeout(60000);
             return handler(page);
         });
