@@ -247,29 +247,15 @@ export class ParserService {
     async parseProducts(products: ProductDto[], sheetName: string) {
         const results: any[] = [];
 
-        await this.browserService.runTask(async clusterPage => {
-            const browser = clusterPage.browser();
-
-            let i = 0;
-            const l = products.length;
-
-            while (i < l) {
-                const product = products[i];
-                let page: Page | null = null;
-
-                try {
-                    page = await browser.newPage();
-
-                    // await this.browserService.rotateUserAgent(page);
-
+        const tasks = products.map(product => async () => {
+            try {
+                return await this.browserService.runTask(async page => {
+                    await this.browserService.rotateUserAgent(page);
                     page.setDefaultNavigationTimeout(60000);
 
                     const pr = await this.getProduct(page, product.url);
 
-                    if (!pr) {
-                        i++;
-                        continue;
-                    }
+                    if (!pr) return null;
 
                     product.name = pr.name;
                     product.price = pr.price;
@@ -283,26 +269,32 @@ export class ParserService {
 
                     await this.productService.saveProduct(product);
 
-                    i++;
-                } catch (error) {
-                    await this.log(`Ошибка при парсинге продукта: ${product.url} - ${error}`);
-                } finally {
-                    try {
-                        if (page && !page.isClosed()) {
-                            await page.close();
-                        }
-                    } catch (err) {
-                        console.error('[parseProducts] failed to close page:', err);
+                    return product;
+                });
+            } catch (error) {
+                await this.log(`Ошибка при парсинге продукта: ${product.url} - ${error}`);
+                return null;
+            }
+        });
+
+        const chunkSize = QUEUE_PARSER_CONCURRENCY;
+        for (let i = 0; i < tasks.length; i += chunkSize) {
+            const chunk = tasks.slice(i, i + chunkSize);
+            const chunkResults = await Promise.allSettled(chunk.map(task => task()));
+
+            for (const result of chunkResults) {
+                if (result.status === 'fulfilled' && result.value) {
+                    const p = result.value;
+                    if (p.name && p.name.trim() !== '') {
+                        results.push([p.externalId, p.name, p.price, p.flag, p.url]);
                     }
                 }
             }
 
-            for (const p of products) {
-                if (p.name && p.name.trim() !== '') {
-                    results.push([p.externalId, p.name, p.price, p.flag, p.url]);
-                }
-            }
-        });
+            await this.log(
+                `Обработано ${Math.min(i + chunkSize, tasks.length)}/${tasks.length} продуктов`,
+            );
+        }
 
         return results;
     }

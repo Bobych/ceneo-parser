@@ -17,11 +17,14 @@ export class BrowserService implements OnModuleInit, OnModuleDestroy {
     async onModuleInit() {
         this.cluster = await Cluster.launch({
             puppeteer: puppeteer_core,
-            concurrency: Cluster.CONCURRENCY_BROWSER,
+            concurrency: Cluster.CONCURRENCY_PAGE,
             maxConcurrency: QUEUE_PARSER_CONCURRENCY,
             puppeteerOptions: BrowserConfig,
             timeout: 180000,
             monitor: false,
+            retryLimit: 3,
+            retryDelay: 5000,
+            skipDuplicateUrls: true,
         });
     }
 
