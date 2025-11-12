@@ -187,24 +187,54 @@ export class ParserService {
         await this.getExchangeRates();
 
         try {
-            while (url) {
-                url = await fixUrl(url);
-                await this.browserService.runTask(async page => {
-                    try {
-                        await this.openUrl(page, url);
-                        const productsOnPage = await this.parseCategoryPage(page, url);
-                        if (!productsOnPage) return;
+            const allCategoryPages: string[] = [url];
+            let currentUrl = url;
 
-                        await this.parseProducts(productsOnPage, sheetName);
-                        url = await this.getNextUrl(page);
+            while (currentUrl) {
+                currentUrl = await fixUrl(currentUrl);
+                const nextUrl = await this.browserService.runTask(async page => {
+                    await this.openUrl(page, currentUrl);
+                    return await this.getNextUrl(page);
+                });
+
+                if (nextUrl && !allCategoryPages.includes(nextUrl)) {
+                    allCategoryPages.push(nextUrl);
+                    currentUrl = nextUrl;
+                } else {
+                    currentUrl = null;
+                }
+            }
+
+            await this.log(`Найдено ${allCategoryPages.length} страниц в категории`);
+
+            const pagePromises = allCategoryPages.map(categoryUrl =>
+                this.browserService.runTask(async page => {
+                    try {
+                        await this.openUrl(page, categoryUrl);
+                        return await this.parseCategoryPage(page, categoryUrl);
                     } catch (error) {
                         await this.log(`Ошибка при парсинге страницы категории: ${error}`);
-                        url = null;
+                        return null;
                     }
-                });
+                }),
+            );
+
+            const pagesResults = await Promise.allSettled(pagePromises);
+
+            const allProducts: ProductDto[] = [];
+            for (const result of pagesResults) {
+                if (result.status === 'fulfilled' && result.value) {
+                    allProducts.push(...result.value);
+                }
+            }
+
+            await this.log(`Найдено ${allProducts.length} продуктов в категории`);
+
+            if (allProducts.length > 0) {
+                await this.parseProducts(allProducts, sheetName);
             }
         } catch (error) {
-            console.error(error);
+            console.error(`Ошибка в parseFullCategory:`, error);
         }
     }
 
