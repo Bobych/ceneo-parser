@@ -247,14 +247,10 @@ export class ParserService {
     async parseProducts(products: ProductDto[], sheetName: string) {
         const results: any[] = [];
 
-        const tasks = products.map(product => async () => {
-            try {
-                return await this.browserService.runTask(async page => {
-                    await this.browserService.rotateUserAgent(page);
-                    page.setDefaultNavigationTimeout(60000);
-
+        const promises = products.map(product =>
+            this.browserService
+                .runTask(async page => {
                     const pr = await this.getProduct(page, product.url);
-
                     if (!pr) return null;
 
                     product.name = pr.name;
@@ -268,19 +264,18 @@ export class ParserService {
                     }
 
                     await this.productService.saveProduct(product);
-
                     return product;
-                });
-            } catch (error) {
-                await this.log(`Ошибка при парсинге продукта: ${product.url} - ${error}`);
-                return null;
-            }
-        });
+                })
+                .catch(error => {
+                    this.log(`Ошибка при парсинге продукта: ${product.url} - ${error}`);
+                    return null;
+                }),
+        );
 
         const chunkSize = QUEUE_PARSER_CONCURRENCY;
-        for (let i = 0; i < tasks.length; i += chunkSize) {
-            const chunk = tasks.slice(i, i + chunkSize);
-            const chunkResults = await Promise.allSettled(chunk.map(task => task()));
+        for (let i = 0; i < promises.length; i += chunkSize) {
+            const chunk = promises.slice(i, i + chunkSize);
+            const chunkResults = await Promise.allSettled(chunk);
 
             for (const result of chunkResults) {
                 if (result.status === 'fulfilled' && result.value) {
@@ -292,7 +287,7 @@ export class ParserService {
             }
 
             await this.log(
-                `Обработано ${Math.min(i + chunkSize, tasks.length)}/${tasks.length} продуктов`,
+                `Обработано ${Math.min(i + chunkSize, promises.length)}/${promises.length} продуктов`,
             );
         }
 
