@@ -6,7 +6,6 @@ import { GoogleModule } from '@/google/google.module';
 import { ParserModule } from '@/parser/parser.module';
 import { AppController } from '@/app.controller';
 import { ApiController } from '@/api/api.controller';
-import { ExportController } from '@/exporter/exporter.controller';
 import { ExporterModule } from '@/exporter/exporter.module';
 
 @Module({

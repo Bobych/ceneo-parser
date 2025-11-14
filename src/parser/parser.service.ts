@@ -12,7 +12,6 @@ import { fixUrl } from '@/utils/fixUrl';
 import { ProductDto } from '@/parser/dto/product.dto';
 import { ProductService } from './product.service';
 import { sleep } from '@/utils/sleep';
-import { QueueService } from '@/queue/queue.service';
 
 @Injectable()
 export class ParserService {
@@ -24,7 +23,6 @@ export class ParserService {
         private readonly captcha: CaptchaService,
         private readonly browserService: BrowserService,
         private readonly productService: ProductService,
-        private readonly queueService: QueueService,
     ) {}
 
     private async log(message: string) {
@@ -36,31 +34,7 @@ export class ParserService {
     }
 
     async onModuleInit() {
-        this.enterWithQueue();
-    }
-
-    private async enterWithQueue() {
-        try {
-            const activeJobs = await this.queueService.getActiveJobsCount();
-            if (activeJobs < QUEUE_PARSER_CONCURRENCY * 2) {
-                await this.scheduleNextUid();
-            }
-        } catch (error) {
-            await this.log(`Глобальная ошибка в scheduleNextUid(): ${error}`);
-        } finally {
-            setTimeout(() => this.enterWithQueue(), 30000);
-        }
-    }
-
-    private async scheduleNextUid() {
-        try {
-            const uid = await this.google.getLastUid();
-
-            await this.queueService.addParseJob(uid);
-            await this.google.increaseLastUid();
-        } catch (error) {
-            console.error('Error scheduling job:', error);
-        }
+        this.enter();
     }
 
     async enter() {
