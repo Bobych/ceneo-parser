@@ -4,7 +4,7 @@ import { Page } from 'puppeteer';
 
 import { IExchangeRate } from '@/interfaces/ExchangeRateInterface';
 import formatCategoryName from '@/utils/formatCategoryName';
-import { ENV, QUEUE_PARSER_CONCURRENCY } from '@/constants';
+import { ENV } from '@/constants';
 import { CaptchaService } from '@/captcha/captcha.service';
 import { BrowserService } from '@/browser/browser.service';
 import { GoogleService } from '@/google/google.service';
@@ -19,6 +19,7 @@ export class ParserService implements OnModuleInit {
     private readonly logger: Logger;
 
     private exchangeRate: number = null;
+    private lastDeletedSheetName: string = '';
 
     constructor(
         private readonly config: ConfigService,
@@ -38,7 +39,7 @@ export class ParserService implements OnModuleInit {
         this.enter();
     }
 
-    async enter() {
+    private async enter() {
         try {
             await this.parse();
         } catch (error) {
@@ -52,7 +53,6 @@ export class ParserService implements OnModuleInit {
         await sleep();
         this.log(`Пытаюсь открыть: ${url}`);
 
-        // await this.browserService.rotateUserAgent(page);
         await page.goto(url, {
             waitUntil: ['domcontentloaded'],
             timeout: 20000,
@@ -68,12 +68,12 @@ export class ParserService implements OnModuleInit {
             this.log(`Успешно дождался селектора: ${selector}.`);
             return;
         } catch (error) {
-            await this.browserService.rotateUserAgent(page, true);
             throw new Error(`Не удалось дождаться селектора ${selector} попытки. Ошибка: ${error}`);
         }
     }
 
-    private async getNextUrl(page: Page) {
+    private async getNextUrl(page: Page, sourceUrl: string) {
+        await this.openUrl(page, sourceUrl);
         return await page.evaluate(() => {
             const nextButton = document.querySelector('.pagination .pagination__next');
             return nextButton ? 'https://www.ceneo.pl' + nextButton.getAttribute('href') : null;
@@ -83,23 +83,28 @@ export class ParserService implements OnModuleInit {
     async parse() {
         const googleRowData = await this.google.getLastUidRow();
 
-        const uidName = formatCategoryName(googleRowData.uid, googleRowData.name);
+        const formattedCategoryName = formatCategoryName(googleRowData.uid, googleRowData.name);
         const url = googleRowData.url;
 
         this.log(`Перехожу к Google Row: ${url}`);
 
         if (url !== '---') {
             try {
-                await this.parseFullCategory(uidName, url);
+                if (this.lastDeletedSheetName !== formattedCategoryName) {
+                    await this.productService.removeSheetName(formattedCategoryName);
+                    this.lastDeletedSheetName = formattedCategoryName;
+                }
+
+                await this.parseFullCategory(formattedCategoryName, url);
             } catch (error) {
-                throw error;
+                this.log(`[ERROR] parser (категория не отпарсилась): ${error}`);
             }
         } else {
             try {
-                await this.productService.removeSheetName(uidName);
+                await this.productService.removeSheetName(formattedCategoryName);
                 await this.productService.saveProduct({
                     name: '',
-                    sheetName: uidName,
+                    sheetName: formattedCategoryName,
                     price: null,
                     externalId: null,
                     flag: false,
@@ -118,18 +123,25 @@ export class ParserService implements OnModuleInit {
         try {
             while (url) {
                 url = await fixUrl(url);
-                await this.browserService.runTask(async page => {
-                    try {
-                        await this.openUrl(page, url);
-                        const productsOnPage = await this.parseCategoryPage(page, url);
-                        if (!productsOnPage) return;
 
-                        await this.parseProducts(productsOnPage, sheetName);
-                        url = await this.getNextUrl(page);
-                    } catch (error) {
-                        this.log(`Ошибка при парсинге страницы категории: ${error}`);
-                        url = null;
-                    }
+                const products = await this.browserService.runTask(async page => {
+                    await this.openUrl(page, url);
+                    await this.waitFor(page, ParserConfig.categoryClasses.category);
+                    return this.parseCategoryPage(page);
+                });
+
+                if (!products) return;
+
+                await Promise.all(
+                    products.map(product =>
+                        this.browserService.runTask(async page => {
+                            await this.parseProduct(page, product, sheetName);
+                        }),
+                    ),
+                );
+
+                url = await this.browserService.runTask(async page => {
+                    return this.getNextUrl(page, url);
                 });
             }
         } catch (error) {
@@ -137,11 +149,8 @@ export class ParserService implements OnModuleInit {
         }
     }
 
-    async parseCategoryPage(page: Page, url: string): Promise<ProductDto[] | null> {
+    async parseCategoryPage(page: Page): Promise<ProductDto[] | null> {
         try {
-            await this.openUrl(page, url);
-            await this.waitFor(page, ParserConfig.categoryClasses.category);
-
             return await page.$$eval(
                 ParserConfig.categoryClasses.category,
                 (rows, categoryClasses) => {
@@ -173,54 +182,19 @@ export class ParserService implements OnModuleInit {
         }
     }
 
-    async parseProducts(products: ProductDto[], sheetName: string) {
-        const results: any[] = [];
+    async parseProduct(page: Page, product: ProductDto, sheetName: string) {
+        const pr = await this.getProduct(page, product.url);
+        if (!pr) return;
 
-        const promises = products.map(product =>
-            this.browserService
-                .runTask(async page => {
-                    const pr = await this.getProduct(page, product.url);
-                    if (!pr) return null;
+        product.name = pr.name;
+        product.price = pr.price;
+        product.flag = pr.flag;
+        product.sheetName = sheetName;
 
-                    product.name = pr.name;
-                    product.price = pr.price;
-                    product.flag = pr.flag;
-                    product.sheetName = sheetName;
+        if (this.exchangeRate && product.price)
+            product.price = Number((product.price / this.exchangeRate).toFixed(2));
 
-                    if (this.exchangeRate !== 0 && pr.price) {
-                        const priceInPLN = pr.price;
-                        product.price = parseFloat((priceInPLN / this.exchangeRate).toFixed(2));
-                    }
-
-                    await this.productService.saveProduct(product);
-                    return product;
-                })
-                .catch(error => {
-                    this.log(`[ERROR] parseProducts: ${product.url} - ${error}`);
-                    return null;
-                }),
-        );
-
-        const chunkSize = QUEUE_PARSER_CONCURRENCY;
-        for (let i = 0; i < promises.length; i += chunkSize) {
-            const chunk = promises.slice(i, i + chunkSize);
-            const chunkResults = await Promise.allSettled(chunk);
-
-            for (const result of chunkResults) {
-                if (result.status === 'fulfilled' && result.value) {
-                    const p = result.value;
-                    if (p.name && p.name.trim() !== '') {
-                        results.push([p.externalId, p.name, p.price, p.flag, p.url]);
-                    }
-                }
-            }
-
-            this.log(
-                `[INFO] Обработано ${Math.min(i + chunkSize, promises.length)}/${promises.length} продуктов`,
-            );
-        }
-
-        return results;
+        await this.productService.saveProduct(product);
     }
 
     async getProduct(
