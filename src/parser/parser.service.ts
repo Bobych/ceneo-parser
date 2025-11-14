@@ -128,10 +128,10 @@ export class ParserService implements OnModuleInit {
 
         try {
             while (url) {
-                url = await fixUrl(url);
+                const currentUrl = await fixUrl(url);
 
                 const products = await this.browserService.runTask(async page => {
-                    await this.openUrl(page, url);
+                    await this.openUrl(page, currentUrl);
                     await this.waitFor(page, ParserConfig.categoryClasses.category);
                     return this.parseCategoryPage(page);
                 });
@@ -147,7 +147,7 @@ export class ParserService implements OnModuleInit {
                 );
 
                 url = await this.browserService.runTask(async page => {
-                    return this.getNextUrl(page, url);
+                    return this.getNextUrl(page, currentUrl);
                 });
             }
         } catch (error) {
