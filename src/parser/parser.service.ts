@@ -103,7 +103,7 @@ export class ParserService implements OnModuleInit {
 
                 await this.parseFullCategory(formattedCategoryName, url);
             } catch (error) {
-                this.log(`[ERROR] parser (категория не отпарсилась): ${error}`);
+                this.log(`[ERROR] parse (категория не отпарсилась): ${error}`);
             }
         } else {
             try {
