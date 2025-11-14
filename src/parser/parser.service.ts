@@ -127,29 +127,31 @@ export class ParserService implements OnModuleInit {
         await this.fetchExchangeRate();
 
         try {
+            const productsFromCategory: ProductDto[] = [];
             while (url) {
                 const currentUrl = await fixUrl(url);
 
-                const products = await this.browserService.runTask(async page => {
+                const productsFromCategoryPage = await this.browserService.runTask(async page => {
                     await this.openUrl(page, currentUrl);
                     await this.waitFor(page, ParserConfig.categoryClasses.category);
                     return this.parseCategoryPage(page);
                 });
+                if (!productsFromCategoryPage) return;
 
-                if (!products) return;
-
-                await Promise.all(
-                    products.map(product =>
-                        this.browserService.runTask(async page => {
-                            await this.parseProduct(page, product, sheetName);
-                        }),
-                    ),
-                );
+                productsFromCategory.push(...productsFromCategoryPage);
 
                 url = await this.browserService.runTask(async page => {
                     return this.getNextUrl(page, currentUrl);
                 });
             }
+
+            await Promise.all(
+                productsFromCategory.map(product =>
+                    this.browserService.runTask(async page => {
+                        await this.parseProduct(page, product, sheetName);
+                    }),
+                ),
+            );
         } catch (error) {
             this.log(`[ERROR] parseFullCategory: ${error}`);
         }
