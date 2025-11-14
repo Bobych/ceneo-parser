@@ -106,7 +106,7 @@ export class ParserService implements OnModuleInit {
                     url: '',
                 });
             } catch (error) {
-                console.log('[ERROR] Saving empty category: ', error);
+                this.log(`[ERROR] Saving empty category: ${error}`);
             }
         }
         await this.google.increaseLastUid();
@@ -133,7 +133,7 @@ export class ParserService implements OnModuleInit {
                 });
             }
         } catch (error) {
-            console.error(error);
+            this.log(`[ERROR] parseFullCategory: ${error}`);
         }
     }
 
@@ -168,7 +168,7 @@ export class ParserService implements OnModuleInit {
                 ParserConfig.categoryClasses,
             );
         } catch (error) {
-            this.log(`Ошибка при парсинге категории: ${error}`);
+            this.log(`[ERROR] parseCategoryPage: ${error}`);
             return null;
         }
     }
