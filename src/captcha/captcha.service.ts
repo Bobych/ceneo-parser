@@ -53,6 +53,7 @@ export class CaptchaService {
 
                 await this.log('Отправляю решение капчи...');
                 await page.click('button[type="submit"]');
+                await page.waitForNavigation({ waitUntil: 'domcontentloaded' });
 
                 await this.log('Капча успешно пройдена.');
                 return true;
