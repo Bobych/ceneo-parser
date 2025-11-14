@@ -68,10 +68,19 @@ export class ParserService implements OnModuleInit {
 
         await page.goto(url, {
             waitUntil: ['domcontentloaded'],
-            timeout: 20000,
+            timeout: 10000,
         });
         this.logParser(`Открыл: ${url}`);
-        await this.captcha.checkCaptcha(page);
+        const hadCaptcha = await this.captcha.checkCaptcha(page);
+
+        if (hadCaptcha) {
+            this.logParser('Перезагружаю страницу после решения капчи...');
+            await page.goto(url, {
+                waitUntil: ['domcontentloaded'],
+                timeout: 10000,
+            });
+            this.logParser('Страница перезагружена после капчи');
+        }
     }
 
     private async waitFor(page: Page, selector: string) {

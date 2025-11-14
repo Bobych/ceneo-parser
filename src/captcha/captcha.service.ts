@@ -31,7 +31,7 @@ export class CaptchaService {
         return this.logger.set({ service: 'parser', message });
     }
 
-    async checkCaptcha(page: Page): Promise<void> {
+    async checkCaptcha(page: Page): Promise<boolean> {
         if (await page.$('.cf-turnstile')) {
             try {
                 await this.log('Нашёл капчу, решаю...');
@@ -41,6 +41,7 @@ export class CaptchaService {
                     '.cf-turnstile input[type="hidden"]',
                     el => el.id,
                 );
+
                 await page.evaluate(
                     (response, dynamicId) => {
                         const input = document.getElementById(dynamicId) as HTMLInputElement;
@@ -50,12 +51,25 @@ export class CaptchaService {
                     dynamicId,
                 );
 
+                await this.log('Отправляю решение капчи...');
                 await page.click('button[type="submit"]');
-                await this.log('Капча решена.');
+
+                await page
+                    .waitForNavigation({
+                        waitUntil: 'domcontentloaded',
+                        timeout: 10000,
+                    })
+                    .catch(() => {
+                        this.log('Навигация не произошла, продолжаем...');
+                    });
+
+                await this.log('Капча успешно пройдена.');
+                return true;
             } catch (error) {
                 await this.log(`Ошибка при решении капчи: ${error}`);
             }
         }
+        return false;
     }
 
     private async solveCaptcha(page: Page) {
