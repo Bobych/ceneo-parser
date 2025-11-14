@@ -6,9 +6,10 @@ import { GoogleModule } from '@/google/google.module';
 import { BrowserModule } from '@/browser/browser.module';
 import { ProductService } from './product.service';
 import { DatabaseService } from '@/database/database.service';
+import { LoggerModule } from '@/logger/logger.module';
 
 @Module({
-    imports: [GoogleModule, BrowserModule, CaptchaModule],
+    imports: [GoogleModule, BrowserModule, CaptchaModule, LoggerModule],
     providers: [ParserService, ProductService, DatabaseService],
     exports: [ParserService],
 })

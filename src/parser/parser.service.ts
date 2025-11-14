@@ -4,15 +4,16 @@ import { Page } from 'puppeteer';
 
 import { IExchangeRate } from '@/interfaces/ExchangeRateInterface';
 import formatCategoryName from '@/utils/formatCategoryName';
-import { ENV } from '@/constants';
 import { CaptchaService } from '@/captcha/captcha.service';
 import { BrowserService } from '@/browser/browser.service';
 import { GoogleService } from '@/google/google.service';
+import { LoggerService } from '@/logger/logger.service';
 import { ProductDto } from '@/parser/dto/product.dto';
 import { ParserConfig } from '@/config/parser.config';
 import { ProductService } from './product.service';
 import { fixUrl } from '@/utils/fixUrl';
 import { sleep } from '@/utils/sleep';
+import { ENV } from '@/constants';
 
 @Injectable()
 export class ParserService implements OnModuleInit {
@@ -27,11 +28,16 @@ export class ParserService implements OnModuleInit {
         private readonly captcha: CaptchaService,
         private readonly browserService: BrowserService,
         private readonly productService: ProductService,
+        private readonly loggerRedisService: LoggerService,
     ) {
         this.logger = new Logger(ParserService.name);
     }
 
-    private log(message: string) {
+    private async log(message: string) {
+        await this.loggerRedisService.set({
+            service: 'parser',
+            message: message,
+        });
         this.logger.log(message);
     }
 
