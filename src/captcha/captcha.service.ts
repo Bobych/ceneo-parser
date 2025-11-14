@@ -54,15 +54,6 @@ export class CaptchaService {
                 await this.log('Отправляю решение капчи...');
                 await page.click('button[type="submit"]');
 
-                await page
-                    .waitForNavigation({
-                        waitUntil: 'domcontentloaded',
-                        timeout: 10000,
-                    })
-                    .catch(() => {
-                        this.log('Навигация не произошла, продолжаем...');
-                    });
-
                 await this.log('Капча успешно пройдена.');
                 return true;
             } catch (error) {

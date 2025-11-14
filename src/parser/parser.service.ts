@@ -68,7 +68,7 @@ export class ParserService implements OnModuleInit {
 
         await page.goto(url, {
             waitUntil: ['domcontentloaded'],
-            timeout: 20000,
+            timeout: 30000,
         });
         this.logParser(`Открыл: ${url}`);
         await this.captcha.checkCaptcha(page);
