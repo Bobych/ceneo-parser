@@ -196,7 +196,7 @@ export class ParserService implements OnModuleInit {
                     return product;
                 })
                 .catch(error => {
-                    this.log(`Ошибка при парсинге продукта: ${product.url} - ${error}`);
+                    this.log(`[ERROR] parseProducts: ${product.url} - ${error}`);
                     return null;
                 }),
         );
@@ -216,7 +216,7 @@ export class ParserService implements OnModuleInit {
             }
 
             this.log(
-                `Обработано ${Math.min(i + chunkSize, promises.length)}/${promises.length} продуктов`,
+                `[INFO] Обработано ${Math.min(i + chunkSize, promises.length)}/${promises.length} продуктов`,
             );
         }
 
@@ -302,7 +302,7 @@ export class ParserService implements OnModuleInit {
                 flag: flag,
             };
         } catch (error) {
-            this.log(`Ошибка: ${error}`);
+            this.log(`[ERROR] getProduct: ${error}`);
             return null;
         }
     }
@@ -314,10 +314,10 @@ export class ParserService implements OnModuleInit {
             const data: IExchangeRate = await response.json();
             const rate = data.rates[0].bid;
 
-            this.log(`Полученный обменный курс (bid): ${rate}`);
+            this.log(`[INFO] Полученный обменный курс (bid): ${rate}`);
             this.exchangeRate = rate || null;
         } catch (error) {
-            this.log(`Ошибка: ${error}`);
+            this.log(`[ERROR] fetchExchangeRate: ${error}`);
         }
     }
 }
