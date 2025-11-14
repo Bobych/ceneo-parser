@@ -1,5 +1,5 @@
 import { Page } from 'puppeteer';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { IExchangeRate } from '@/interfaces/ExchangeRateInterface';
@@ -14,7 +14,9 @@ import { ProductService } from './product.service';
 import { sleep } from '@/utils/sleep';
 
 @Injectable()
-export class ParserService {
+export class ParserService implements OnModuleInit {
+    private readonly logger: Logger;
+
     private exchangeRate: number = null;
 
     constructor(
@@ -23,10 +25,12 @@ export class ParserService {
         private readonly captcha: CaptchaService,
         private readonly browserService: BrowserService,
         private readonly productService: ProductService,
-    ) {}
+    ) {
+        this.logger = new Logger(ParserService.name);
+    }
 
     private async log(message: string) {
-        console.log(message);
+        this.logger.log(message);
     }
 
     private formUidName(uid: string, name: string) {
