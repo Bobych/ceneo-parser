@@ -1,16 +1,17 @@
-import { Page } from 'puppeteer';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Page } from 'puppeteer';
 
 import { IExchangeRate } from '@/interfaces/ExchangeRateInterface';
-import { ParserConfig } from '@/config/parser.config';
-import { GoogleService } from '@/google/google.service';
+import formatCategoryName from '@/utils/formatCategoryName';
 import { ENV, QUEUE_PARSER_CONCURRENCY } from '@/constants';
 import { CaptchaService } from '@/captcha/captcha.service';
 import { BrowserService } from '@/browser/browser.service';
-import { fixUrl } from '@/utils/fixUrl';
+import { GoogleService } from '@/google/google.service';
 import { ProductDto } from '@/parser/dto/product.dto';
+import { ParserConfig } from '@/config/parser.config';
 import { ProductService } from './product.service';
+import { fixUrl } from '@/utils/fixUrl';
 import { sleep } from '@/utils/sleep';
 
 @Injectable()
@@ -31,10 +32,6 @@ export class ParserService implements OnModuleInit {
 
     private async log(message: string) {
         this.logger.log(message);
-    }
-
-    private formUidName(uid: string, name: string) {
-        return `${uid}_${name}`;
     }
 
     async onModuleInit() {
@@ -91,7 +88,7 @@ export class ParserService implements OnModuleInit {
             throw Error('[GO TO FIRST LINE]');
         }
 
-        const uidName = this.formUidName(googleRowData.uid, googleRowData.name);
+        const uidName = formatCategoryName(googleRowData.uid, googleRowData.name);
         const url = googleRowData.url;
 
         await this.log(`Перехожу к Google Row: ${url}`);
@@ -118,7 +115,7 @@ export class ParserService implements OnModuleInit {
     async parse() {
         const googleRowData = await this.google.getLastUidRow();
 
-        const uidName = this.formUidName(googleRowData.uid, googleRowData.name);
+        const uidName = formatCategoryName(googleRowData.uid, googleRowData.name);
         const url = googleRowData.url;
 
         await this.log(`Перехожу к Google Row: ${url}`);
