@@ -1,4 +1,4 @@
-import { Browser, Page } from 'puppeteer';
+import { Page } from 'puppeteer';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -13,7 +13,6 @@ import { ProductDto } from '@/parser/dto/product.dto';
 import { ProductService } from './product.service';
 import { sleep } from '@/utils/sleep';
 import { QueueService } from '@/queue/queue.service';
-import { JobContextService } from '@/queue/job-context.service';
 
 @Injectable()
 export class ParserService {
@@ -26,23 +25,10 @@ export class ParserService {
         private readonly browserService: BrowserService,
         private readonly productService: ProductService,
         private readonly queueService: QueueService,
-        private readonly jobContext: JobContextService,
     ) {}
 
     private async log(message: string) {
         console.log(message);
-    }
-
-    async updateJobProgress(extraData?: any) {
-        const job = this.jobContext.getJob();
-
-        if (job) {
-            await job.updateProgress({
-                timestamp: Date.now(),
-                uid: job.data.uid,
-                ...extraData,
-            });
-        }
     }
 
     private formUidName(uid: string, name: string) {
@@ -299,18 +285,7 @@ export class ParserService {
         url: string,
     ): Promise<Pick<ProductDto, 'name' | 'price' | 'flag'>> {
         try {
-            await this.updateJobProgress({
-                stage: 'parsing_product',
-                productUrl: url,
-                timestamp: Date.now(),
-            });
-
             await this.openUrl(page, url);
-
-            await this.updateJobProgress({
-                stage: 'page_loaded',
-                status: 'analyzing_offers',
-            });
 
             const count = await page.$$eval(
                 ParserConfig.productClasses.offer,
@@ -320,11 +295,6 @@ export class ParserService {
             if (count === 0) {
                 return null;
             }
-
-            await this.updateJobProgress({
-                stage: 'offers_found',
-                offersCount: count,
-            });
 
             const offers = await page.$$eval(
                 ParserConfig.productClasses.offer,
@@ -368,11 +338,6 @@ export class ParserService {
                 ParserConfig.productClasses,
             );
 
-            await this.updateJobProgress({
-                stage: 'offers_processed',
-                validOffers: offers.length,
-            });
-
             const name = await page.$eval(
                 ParserConfig.productClasses.name,
                 el => el.textContent?.trim() || '',
@@ -387,11 +352,6 @@ export class ParserService {
             if (price === null) {
                 flag = false;
             }
-
-            await this.updateJobProgress({
-                stage: 'product_parsed',
-                result: { name, price, flag },
-            });
 
             return {
                 name: name,
