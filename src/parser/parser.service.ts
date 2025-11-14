@@ -30,7 +30,7 @@ export class ParserService implements OnModuleInit {
         this.logger = new Logger(ParserService.name);
     }
 
-    private async log(message: string) {
+    private log(message: string) {
         this.logger.log(message);
     }
 
@@ -42,7 +42,7 @@ export class ParserService implements OnModuleInit {
         try {
             await this.parse();
         } catch (error) {
-            await this.log(`Глобальная ошибка в parse(): ${error}`);
+            this.log(`Глобальная ошибка в parse(): ${error}`);
         } finally {
             setTimeout(() => this.enter(), 2000);
         }
@@ -50,22 +50,22 @@ export class ParserService implements OnModuleInit {
 
     private async openUrl(page: Page, url: string) {
         await sleep();
-        await this.log(`Пытаюсь открыть: ${url}`);
+        this.log(`Пытаюсь открыть: ${url}`);
 
         // await this.browserService.rotateUserAgent(page);
         await page.goto(url, {
             waitUntil: ['domcontentloaded'],
             timeout: 20000,
         });
-        await this.log(`Открыл: ${url}`);
+        this.log(`Открыл: ${url}`);
         await this.captcha.checkCaptcha(page);
     }
 
     private async waitFor(page: Page, selector: string) {
         try {
-            await this.log(`Жду селектор: ${selector}.`);
+            this.log(`Жду селектор: ${selector}.`);
             await page.waitForSelector(selector, { timeout: 20000 });
-            await this.log(`Успешно дождался селектора: ${selector}.`);
+            this.log(`Успешно дождался селектора: ${selector}.`);
             return;
         } catch (error) {
             await this.browserService.rotateUserAgent(page, true);
@@ -91,7 +91,7 @@ export class ParserService implements OnModuleInit {
         const uidName = formatCategoryName(googleRowData.uid, googleRowData.name);
         const url = googleRowData.url;
 
-        await this.log(`Перехожу к Google Row: ${url}`);
+        this.log(`Перехожу к Google Row: ${url}`);
 
         if (url !== '---') {
             await this.parseFullCategory(uidName, url);
@@ -118,7 +118,7 @@ export class ParserService implements OnModuleInit {
         const uidName = formatCategoryName(googleRowData.uid, googleRowData.name);
         const url = googleRowData.url;
 
-        await this.log(`Перехожу к Google Row: ${url}`);
+        this.log(`Перехожу к Google Row: ${url}`);
 
         if (url !== '---') {
             try {
@@ -159,7 +159,7 @@ export class ParserService implements OnModuleInit {
                         await this.parseProducts(productsOnPage, sheetName);
                         url = await this.getNextUrl(page);
                     } catch (error) {
-                        await this.log(`Ошибка при парсинге страницы категории: ${error}`);
+                        this.log(`Ошибка при парсинге страницы категории: ${error}`);
                         url = null;
                     }
                 });
@@ -200,7 +200,7 @@ export class ParserService implements OnModuleInit {
                 ParserConfig.categoryClasses,
             );
         } catch (error) {
-            await this.log(`Ошибка при парсинге категории: ${error}`);
+            this.log(`Ошибка при парсинге категории: ${error}`);
             return null;
         }
     }
@@ -247,7 +247,7 @@ export class ParserService implements OnModuleInit {
                 }
             }
 
-            await this.log(
+            this.log(
                 `Обработано ${Math.min(i + chunkSize, promises.length)}/${promises.length} продуктов`,
             );
         }
@@ -334,7 +334,7 @@ export class ParserService implements OnModuleInit {
                 flag: flag,
             };
         } catch (error) {
-            await this.log(`Ошибка: ${error}`);
+            this.log(`Ошибка: ${error}`);
             return null;
         }
     }
@@ -346,10 +346,10 @@ export class ParserService implements OnModuleInit {
             const data: IExchangeRate = await response.json();
             const rate = data.rates[0].bid;
 
-            await this.log(`Полученный обменный курс (bid): ${rate}`);
+            this.log(`Полученный обменный курс (bid): ${rate}`);
             this.exchangeRate = rate || null;
         } catch (error) {
-            await this.log(`Ошибка: ${error}`);
+            this.log(`Ошибка: ${error}`);
         }
     }
 }
