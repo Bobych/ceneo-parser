@@ -80,38 +80,6 @@ export class ParserService implements OnModuleInit {
         });
     }
 
-    async parseWithUid(uid: string) {
-        const googleRowData = await this.google.getUidRow(uid);
-
-        if (!googleRowData) {
-            await this.google.setLastUid('1');
-            throw Error('[GO TO FIRST LINE]');
-        }
-
-        const uidName = formatCategoryName(googleRowData.uid, googleRowData.name);
-        const url = googleRowData.url;
-
-        this.log(`Перехожу к Google Row: ${url}`);
-
-        if (url !== '---') {
-            await this.parseFullCategory(uidName, url);
-        } else {
-            try {
-                await this.productService.removeSheetName(uidName);
-                await this.productService.saveProduct({
-                    name: '',
-                    sheetName: uidName,
-                    price: null,
-                    externalId: null,
-                    flag: false,
-                    url: '',
-                });
-            } catch (error) {
-                console.log('[ERROR] Saving empty category: ', error);
-            }
-        }
-    }
-
     async parse() {
         const googleRowData = await this.google.getLastUidRow();
 
@@ -145,7 +113,7 @@ export class ParserService implements OnModuleInit {
     }
 
     async parseFullCategory(sheetName: string, url: string) {
-        await this.getExchangeRates();
+        await this.fetchExchangeRate();
 
         try {
             while (url) {
@@ -339,7 +307,7 @@ export class ParserService implements OnModuleInit {
         }
     }
 
-    async getExchangeRates() {
+    async fetchExchangeRate() {
         try {
             const url = this.config.get<string>(ENV.EXCHANGE_RATE_URL);
             const response = await fetch(url);
