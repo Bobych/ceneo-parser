@@ -85,8 +85,7 @@ export class ParserService implements OnModuleInit {
         }
     }
 
-    private async getNextUrl(page: Page, sourceUrl: string) {
-        await this.openUrl(page, sourceUrl);
+    private async getNextUrl(page: Page) {
         return await page.evaluate(() => {
             const nextButton = document.querySelector('.pagination .pagination__next');
             return nextButton ? 'https://www.ceneo.pl' + nextButton.getAttribute('href') : null;
@@ -138,18 +137,24 @@ export class ParserService implements OnModuleInit {
             while (url) {
                 const currentUrl = await fixUrl(url);
 
-                const productsFromCategoryPage = await this.browserService.runTask(async page => {
-                    await this.openUrl(page, currentUrl);
-                    await this.waitFor(page, ParserConfig.categoryClasses.category);
-                    return this.parseCategoryPage(page);
-                });
-                if (!productsFromCategoryPage) return;
+                const { productsFromCategoryPage, nextUrl } = await this.browserService.runTask(
+                    async page => {
+                        await this.openUrl(page, currentUrl);
+                        await this.waitFor(page, ParserConfig.categoryClasses.category);
+
+                        const [productsFromCategoryPage, nextUrl] = await Promise.all([
+                            this.parseCategoryPage(page),
+                            this.getNextUrl(page),
+                        ]);
+
+                        return { productsFromCategoryPage, nextUrl };
+                    },
+                );
+                if (!productsFromCategoryPage) continue;
 
                 productsFromCategory.push(...productsFromCategoryPage);
 
-                url = await this.browserService.runTask(async page => {
-                    return this.getNextUrl(page, currentUrl);
-                });
+                url = nextUrl;
             }
 
             await Promise.all(
