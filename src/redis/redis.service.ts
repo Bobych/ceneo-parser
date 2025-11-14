@@ -67,11 +67,20 @@ export class RedisService implements OnModuleInit {
         }
     }
 
+    async getLogs(key: string, count: number = 100): Promise<string[]> {
+        try {
+            return await this.client.lrange(key, 0, count - 1);
+        } catch (error) {
+            console.log(`[REDIS] Error getting logs for ${key}: ${error}`);
+            return [];
+        }
+    }
+
     async handleUpdate(channel: string) {
         const [prefix, key] = channel.split(':');
 
         if (prefix === 'logs') {
-            const logs = await this.client.lrange(channel, 0, 9);
+            const logs = await this.client.lrange(channel, 0, 99);
             if (logs.length) {
                 await this.socket.sendLog({
                     service: key as ILog['service'],
