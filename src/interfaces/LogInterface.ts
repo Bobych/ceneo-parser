@@ -1,4 +1,4 @@
 export interface ILog {
-    service: 'redis' | 'parser' | 'google';
+    service: 'parser' | 'category_result';
     message: any;
 }
