@@ -4,6 +4,7 @@ package-lock.json
 *.db
 public/
 exports/
+build/
 
 *.log
 
