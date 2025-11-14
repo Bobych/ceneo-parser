@@ -47,7 +47,7 @@ export class ProductService {
 
     async removeSheetName(sheetName: string): Promise<void> {
         const prefix = sheetName.split('_').slice(0, 2).join('_') + '_';
-        console.log('\n\nREMOVING:\n', sheetName, '\n\nPREFIX: ', prefix, '\n\n');
+        console.log('\n\nREMOVING:\n', sheetName, '\nPREFIX: ', prefix, '\n\n');
         try {
             await this.prisma.product.deleteMany({
                 where: {
@@ -57,7 +57,7 @@ export class ProductService {
                 },
             });
         } catch (e) {
-            console.error('FULL ERROR BY REMOVING: ', e, JSON.stringify(e, null, 2));
+            console.error('[ERROR] removeSheetName: ', e, JSON.stringify(e, null, 2));
         }
     }
 }
