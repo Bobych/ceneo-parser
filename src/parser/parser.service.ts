@@ -33,12 +33,19 @@ export class ParserService implements OnModuleInit {
         this.logger = new Logger(ParserService.name);
     }
 
-    private async log(message: string) {
+    private async logParser(message: string) {
         await this.loggerRedisService.set({
             service: 'parser',
             message: message,
         });
         this.logger.log(message);
+    }
+
+    private async logCategoryResult(message: string) {
+        await this.loggerRedisService.set({
+            service: 'category_result',
+            message: message,
+        });
     }
 
     async onModuleInit() {
@@ -49,7 +56,7 @@ export class ParserService implements OnModuleInit {
         try {
             await this.parse();
         } catch (error) {
-            this.log(`Глобальная ошибка в parse(): ${error}`);
+            this.logParser(`Глобальная ошибка в parse(): ${error}`);
         } finally {
             setTimeout(() => this.enter(), 2000);
         }
@@ -57,21 +64,21 @@ export class ParserService implements OnModuleInit {
 
     private async openUrl(page: Page, url: string) {
         await sleep();
-        this.log(`Пытаюсь открыть: ${url}`);
+        this.logParser(`Пытаюсь открыть: ${url}`);
 
         await page.goto(url, {
             waitUntil: ['domcontentloaded'],
             timeout: 20000,
         });
-        this.log(`Открыл: ${url}`);
+        this.logParser(`Открыл: ${url}`);
         await this.captcha.checkCaptcha(page);
     }
 
     private async waitFor(page: Page, selector: string) {
         try {
-            this.log(`Жду селектор: ${selector}.`);
+            this.logParser(`Жду селектор: ${selector}.`);
             await page.waitForSelector(selector, { timeout: 20000 });
-            this.log(`Успешно дождался селектора: ${selector}.`);
+            this.logParser(`Успешно дождался селектора: ${selector}.`);
             return;
         } catch (error) {
             throw new Error(`Не удалось дождаться селектора ${selector} попытки. Ошибка: ${error}`);
@@ -92,7 +99,7 @@ export class ParserService implements OnModuleInit {
         const formattedCategoryName = formatCategoryName(googleRowData.uid, googleRowData.name);
         const url = googleRowData.url;
 
-        this.log(`Перехожу к Google Row: ${url}`);
+        this.logParser(`Перехожу к Google Row: ${url}`);
 
         if (url !== '---') {
             try {
@@ -103,7 +110,7 @@ export class ParserService implements OnModuleInit {
 
                 await this.parseFullCategory(formattedCategoryName, url);
             } catch (error) {
-                this.log(`[ERROR] parse (категория не отпарсилась): ${error}`);
+                this.logParser(`[ERROR] parse (категория не отпарсилась): ${error}`);
             }
         } else {
             try {
@@ -117,7 +124,7 @@ export class ParserService implements OnModuleInit {
                     url: '',
                 });
             } catch (error) {
-                this.log(`[ERROR] Saving empty category: ${error}`);
+                this.logParser(`[ERROR] Saving empty category: ${error}`);
             }
         }
         await this.google.increaseLastUid();
@@ -152,8 +159,12 @@ export class ParserService implements OnModuleInit {
                     }),
                 ),
             );
+
+            await this.logCategoryResult(
+                `Продуктов обработано в категории ${sheetName}: ${productsFromCategory.length}`,
+            );
         } catch (error) {
-            this.log(`[ERROR] parseFullCategory: ${error}`);
+            this.logParser(`[ERROR] parseFullCategory: ${error}`);
         }
     }
 
@@ -185,7 +196,7 @@ export class ParserService implements OnModuleInit {
                 ParserConfig.categoryClasses,
             );
         } catch (error) {
-            this.log(`[ERROR] parseCategoryPage: ${error}`);
+            this.logParser(`[ERROR] parseCategoryPage: ${error}`);
             return null;
         }
     }
@@ -284,7 +295,7 @@ export class ParserService implements OnModuleInit {
                 flag: flag,
             };
         } catch (error) {
-            this.log(`[ERROR] getProduct: ${error}`);
+            this.logParser(`[ERROR] getProduct: ${error}`);
             return null;
         }
     }
@@ -296,10 +307,10 @@ export class ParserService implements OnModuleInit {
             const data: IExchangeRate = await response.json();
             const rate = data.rates[0].bid;
 
-            this.log(`[INFO] Полученный обменный курс (bid): ${rate}`);
+            this.logParser(`[INFO] Полученный обменный курс (bid): ${rate}`);
             this.exchangeRate = rate || null;
         } catch (error) {
-            this.log(`[ERROR] fetchExchangeRate: ${error}`);
+            this.logParser(`[ERROR] fetchExchangeRate: ${error}`);
         }
     }
 }
